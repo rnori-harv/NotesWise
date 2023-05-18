@@ -1,11 +1,20 @@
 import PyPDF2
-from dotenv import dotenv_values
+from dotenv import dotenv_values, load_dotenv, find_dotenv
 import openai
+import langchain
+from langchain.document_loaders import PyPDFLoader
+from langchain.indexes import VectorstoreIndexCreator
+import pypdf
+
+from langchain.chains import RetrievalQA
+from langchain.llms import OpenAI
 
 env_vars = dotenv_values('.env')
+load_dotenv(dotenv_path='.env')
 
 # Access the values
 openai.api_key = env_vars['OPENAI_API_KEY']
+OPENAI_API_KEY = env_vars['OPENAI_API_KEY']
 
 
 def read_pdf(file_path):
@@ -21,7 +30,7 @@ def read_pdf(file_path):
         return ans
 
 def pass_knowledge_to_openai(text):
-    prompt = "This is your knowledge base, only use the following content in this prompt for your answers. If a question response cannot be found within the text provided, respond to the question with \"NOT POSSIBLE TO ANSWER \". Here is your knowledge base: " + text + "Question: What is a Y-combinator?"
+    prompt = "This is your knowledge base, only use the following content in this prompt for your answers. If a question response cannot be found within the text provided, respond to the question with \"NOT POSSIBLE TO ANSWER\". Here is your knowledge base: " + text + "Question: What is a Y-combinator?"
     response = openai.Completion.create(
         engine='text-davinci-003',
         prompt=prompt,
@@ -33,8 +42,21 @@ def pass_knowledge_to_openai(text):
     generated_text = response.choices[0].text.strip()
     return generated_text
 
+def langchain_model(file_path):
+    loader = PyPDFLoader(file_path)
+    index = VectorstoreIndexCreator().from_loaders([loader])
+    query = "What is a Y combinator?"
+    results = index.query(query)
+    return results
 
-# Provide the path to your PDF file
+    
 pdf_file_path = './152/lec01-intro.pdf'
-pased_text = read_pdf(pdf_file_path)
-print(pass_knowledge_to_openai(pased_text))
+
+# BASIC MODEL with Prompt engineering
+#pased_text = read_pdf(pdf_file_path)
+#print(pass_knowledge_to_openai(pased_text))
+
+# LANGCHAIN MODEL:
+res = langchain_model(pdf_file_path)
+print(res)
+
