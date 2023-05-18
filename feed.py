@@ -21,7 +21,7 @@ def read_pdf(file_path):
         return ans
 
 def pass_to_openai(text):
-    prompt = "This is your knowledge base, only use the following content in this prompt for your answers. " + text + "Question: What is the difference between operational and denotational semantics?"
+    prompt = "This is your knowledge base, only use the following content in this prompt for your answers. If a question response cannot be found within the text provided, respond to the question with \"NOT POSSIBLE TO ANSWER \". Here is your knowledge base: " + text + "Question: What is a Y-combinator?"
     response = openai.Completion.create(
         engine='text-davinci-003',
         prompt=prompt,
