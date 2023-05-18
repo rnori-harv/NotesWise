@@ -20,7 +20,7 @@ def read_pdf(file_path):
             ans += text
         return ans
 
-def pass_to_openai(text):
+def pass_knowledge_to_openai(text):
     prompt = "This is your knowledge base, only use the following content in this prompt for your answers. If a question response cannot be found within the text provided, respond to the question with \"NOT POSSIBLE TO ANSWER \". Here is your knowledge base: " + text + "Question: What is a Y-combinator?"
     response = openai.Completion.create(
         engine='text-davinci-003',
@@ -37,4 +37,4 @@ def pass_to_openai(text):
 # Provide the path to your PDF file
 pdf_file_path = './152/lec01-intro.pdf'
 pased_text = read_pdf(pdf_file_path)
-print(pass_to_openai(pased_text))
+print(pass_knowledge_to_openai(pased_text))
