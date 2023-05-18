@@ -1,0 +1,2 @@
+Py2PDF2
+dotenv
