@@ -67,7 +67,7 @@ pdf_file_paths = ['./152/lec01-intro.pdf', './152/lec02-smallstep.pdf', './152/l
 #print(pass_knowledge_to_openai(pased_text))
 
 # LANGCHAIN MODEL:
-files = st.file_uploader("Upload your lecture note files (PDF)", type=["pdf", "txt", "docx"], accept_multiple_files=True)
+files = st.file_uploader("Upload your lecture note files (PDF)", type=["pdf"], accept_multiple_files=True)
 while files == []:
     time.sleep(0.5)
 file_paths = []
