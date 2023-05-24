@@ -12,16 +12,17 @@ from langchain.llms import OpenAI
 
 import streamlit as st  
 
-env_vars = dotenv_values('.env')
-load_dotenv(dotenv_path='.env')
+env_vars = dotenv_values('../.env')
+load_dotenv(dotenv_path='../.env')
 
 # Access the values
 openai.api_key = env_vars['OPENAI_API_KEY']
 OPENAI_API_KEY = env_vars['OPENAI_API_KEY']
 
 st.title('NotesWise')
+st.write('NotesWise is a tool that allows you to ask questions about your notes and get answers from your notes. It is powered by OpenAI\'s GPT-3 and LangChain\'s LangLearner Model. To get started, upload your notes in PDF format below.')
 
-
+# BASIC MODEL with Prompt engineering
 def read_pdf(file_path):
     with open(file_path, 'rb') as file:
         reader = PyPDF2.PdfReader(file)
@@ -47,14 +48,14 @@ def pass_knowledge_to_openai(text):
     generated_text = response.choices[0].text.strip()
     return generated_text
 
-def langchain_model(file_paths, query):
-    for i in range(len(file_paths)):
-        file_paths[i] = PyPDFLoader(file_paths[i])
-    
-    index = VectorstoreIndexCreator().from_loaders(file_paths)
-    # query = "What is a Y combinator?"
 
-    results = index.query(query)
+def load_langchain_model(file_paths):
+    loaders = [PyPDFLoader(file_path) for file_path in file_paths]
+    index = VectorstoreIndexCreator().from_loaders(loaders)
+    return index
+
+def query_model(model, query):
+    results = model.query(query)
     return results
 
     
@@ -66,9 +67,20 @@ pdf_file_paths = ['./152/lec01-intro.pdf', './152/lec02-smallstep.pdf', './152/l
 #print(pass_knowledge_to_openai(pased_text))
 
 # LANGCHAIN MODEL:
+files = st.file_uploader("Upload your lecture note files (PDF)", type="pdf", accept_multiple_files=True)
+while files == []:
+    time.sleep(0.5)
+file_paths = []
+for file in files:
+    file_paths.append(file.name)
+
+
+
+model = load_langchain_model(file_paths)
+
+# User input
 prompt = st.text_input('Enter your question here:')
-while prompt == '':
-    time.sleep(1)
-res = langchain_model(pdf_file_paths, prompt)
-st.write(res)
+if prompt != '':
+    res = query_model(model, prompt)
+    st.write(res)
 
