@@ -99,7 +99,7 @@ prompt = st.text_input('Enter your question here:')
 if prompt != '':
     res, source_docs = query_model(model, prompt)
     st.write(res)
-    st.write("Source documents:")
+    st.write("Source information consulted:")
     for doc in source_docs:
-        st.write(doc)
+        st.write(doc.metadata["source"] + ", Page " + str(doc.metadata["page"] + 1))
 
