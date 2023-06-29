@@ -1,5 +1,8 @@
-Py2PDF2
+PyPDF2
 pypdf
-dotenv
+python-dotenv
+openai
+chromadb
 langchain
 streamlit
+tiktoken

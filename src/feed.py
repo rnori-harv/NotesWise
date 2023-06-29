@@ -10,6 +10,12 @@ import time
 from langchain.chains import RetrievalQA
 from langchain.llms import OpenAI
 
+from langchain.chains import RetrievalQA
+from langchain.indexes import VectorstoreIndexCreator
+from langchain.text_splitter import CharacterTextSplitter
+from langchain.embeddings import OpenAIEmbeddings
+from langchain.vectorstores import Chroma
+
 import streamlit as st  
 
 env_vars = dotenv_values('../.env')
@@ -20,7 +26,7 @@ openai.api_key = env_vars['OPENAI_API_KEY']
 OPENAI_API_KEY = env_vars['OPENAI_API_KEY']
 
 st.title('NotesWise')
-st.write('NotesWise is a tool that allows you to ask questions about your notes and get answers from your notes. It is powered by OpenAI\'s GPT-3 and LangChain\'s LangLearner Model. To get started, upload your notes in PDF format below.')
+st.write('NotesWise is a tool that allows you to ask questions about your notes and get answers from your notes. It is powered by OpenAI\'s GPT-4 and LangChain\'s LangLearner Model. To get started, upload your notes in PDF format below.')
 
 # BASIC MODEL with Prompt engineering
 def read_pdf(file_path):
@@ -36,7 +42,7 @@ def read_pdf(file_path):
         return ans
 
 def pass_knowledge_to_openai(text):
-    prompt = "This is your knowledge base, only use the following content in this prompt for your answers. If a question response cannot be found within the text provided, respond to the question with \"NOT POSSIBLE TO ANSWER\". Here is your knowledge base: " + text + "Question: What is a Y-combinator?"
+    prompt = "You have been given information" 
     response = openai.Completion.create(
         engine='text-davinci-003',
         prompt=prompt,
@@ -50,13 +56,23 @@ def pass_knowledge_to_openai(text):
 
 
 def load_langchain_model(file_paths):
-    loaders = [PyPDFLoader(file_path) for file_path in file_paths]
-    index = VectorstoreIndexCreator().from_loaders(loaders)
-    return index
+    documents = [PyPDFLoader(file_path).load_and_split()[0] for file_path in file_paths]
+
+    # select which embeddings we want to use
+    embeddings = OpenAIEmbeddings()
+    # create the vectorestore to use as the index
+    db = Chroma.from_documents(documents, embeddings)
+    # expose this index in a retriever interface
+    retriever = db.as_retriever(search_type="similarity", search_kwargs={"k":2})
+    # create a chain to answer questions 
+    qa = RetrievalQA.from_chain_type(
+        llm=OpenAI(), chain_type="stuff", retriever=retriever, return_source_documents=True)
+    return qa
 
 def query_model(model, query):
-    results = model.query(query)
-    return results
+    ans = model({"query": query})
+    print(ans)
+    return ans["result"], ans["source_documents"]
 
     
 pdf_file_paths = ['./152/lec01-intro.pdf', './152/lec02-smallstep.pdf', './152/lec03-inductive-proof.pdf'
@@ -81,6 +97,9 @@ model = load_langchain_model(file_paths)
 # User input
 prompt = st.text_input('Enter your question here:')
 if prompt != '':
-    res = query_model(model, prompt)
+    res, source_docs = query_model(model, prompt)
     st.write(res)
+    st.write("Source documents:")
+    for doc in source_docs:
+        st.write(doc)
 
