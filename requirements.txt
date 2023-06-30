@@ -6,3 +6,5 @@ chromadb
 langchain
 streamlit
 tiktoken
+typing
+google-search-results
