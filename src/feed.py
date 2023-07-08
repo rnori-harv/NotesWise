@@ -92,7 +92,6 @@ def load_langchain_model(file_paths):
 
 def query_langchain_model(model, query):
     ans = model({"query": query})
-    print(ans)
     return ans["result"], ans["source_documents"]
 
 search = SerpAPIWrapper()
@@ -157,8 +156,8 @@ class CustomOutputParser(AgentOutputParser):
 def llm_agent():
     llm = OpenAI(temperature=0.1)
     tools = [
-        Tool(name = "Source Info", func = get_source_info, description = "Useful for when you need to consult information within your knowledge base. Use this before the other."),
-        Tool(name = "Search", func = search.run, description = "Useful for when you need to consult information outside of your knowledge base.")
+        Tool(name = "Check lecture notes", func = get_source_info, description = "Useful for when you need to consult information within your knowledge base. Use this before searching online."),
+        Tool(name = "Search Online", func = search.run, description = "Useful for when you need to consult information when check lecture notes does not give you enough information.")
     ]
 
     # agent = initialize_agent(tools, llm, verbose=True)
@@ -203,7 +202,7 @@ def llm_agent():
         stop=["\nObservation:"], 
         allowed_tools=tool_names
     )
-    agent_executor = AgentExecutor.from_agent_and_tools(agent=agent, tools=tools, verbose=True)
+    agent_executor = AgentExecutor.from_agent_and_tools(agent=agent, tools=tools, verbose=False)
     return agent_executor
 
 
@@ -239,6 +238,7 @@ model = load_langchain_model(file_paths)
 prompt = st.text_input('Enter your question here:')
 if prompt != '':
     res, source_docs = query_langchain_model(model, prompt)
+    st.markdown("<h1 style='text-align: center; color: green; font-family: sans-serif'>Answer from knowledge base:</h1>", unsafe_allow_html=True)
     st.write(res)
     st.write("Source information consulted:")
     information_consulted = []
@@ -248,6 +248,7 @@ if prompt != '':
 
     my_agent = llm_agent()
     ans = my_agent.run(prompt)
+    st.markdown("<h1 style='text-align: center; color: green; font-family: sans-serif'>Answer from Agent:</h1>", unsafe_allow_html=True)
     st.write(ans)
 
     
