@@ -206,15 +206,6 @@ def llm_agent():
     agent_executor = AgentExecutor.from_agent_and_tools(agent=agent, tools=tools, verbose=True)
     return agent_executor
 
-    
-pdf_file_paths = ['./152/lec01-intro.pdf', './152/lec02-smallstep.pdf', './152/lec03-inductive-proof.pdf'
-                  , './152/lec04-largestep.pdf', './152/lec05-imp.pdf', './152/lec06-denotational.pdf']
-
-# BASIC MODEL with Prompt engineering
-#pased_text = read_pdf(pdf_file_path)
-#print(pass_knowledge_to_openai(pased_text))
-
-# LANGCHAIN MODEL:
 
 directory_path = st.text_input('Enter the absolute directory path of your lecture notes here:')
 
