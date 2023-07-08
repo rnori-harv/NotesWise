@@ -6,6 +6,7 @@ from langchain import SerpAPIWrapper
 import pypdf
 import time
 import re
+from io import StringIO
 from typing import List, Union
 
 
@@ -156,7 +157,7 @@ class CustomOutputParser(AgentOutputParser):
 def llm_agent():
     llm = OpenAI(temperature=0.1)
     tools = [
-                Tool(name = "Source Info", func = get_source_info, description = "Useful for when you need to consult information within your knowledge base. Use this before the other tool search.")
+        Tool(name = "Source Info", func = get_source_info, description = "Useful for when you need to consult information within your knowledge base. Use this before the other."),
         Tool(name = "Search", func = search.run, description = "Useful for when you need to consult information outside of your knowledge base.")
     ]
 
@@ -214,12 +215,21 @@ pdf_file_paths = ['./152/lec01-intro.pdf', './152/lec02-smallstep.pdf', './152/l
 #print(pass_knowledge_to_openai(pased_text))
 
 # LANGCHAIN MODEL:
+
+directory_path = st.text_input('Enter the absolute directory path of your lecture notes here:')
+
+while directory_path == '':
+    time.sleep(0.5)
+
+if directory_path[-1] != '/':
+    directory_path += '/'
+
 files = st.file_uploader("Upload your lecture note files (PDF)", type=["pdf"], accept_multiple_files=True)
 while files == []:
     time.sleep(0.5)
 file_paths = []
 for file in files:
-    file_paths.append(file.name)
+    file_paths.append(directory_path + file.name)
 
 
 def get_source_info(prompt):
