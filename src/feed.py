@@ -46,12 +46,9 @@ load_dotenv(dotenv_path='../.env')
 st.title('NotesWise')
 st.write('NotesWise is a tool that allows you to ask questions about your notes and get answers from your notes. It is powered by OpenAI\'s GPT-4 and LangChain\'s LangLearner Model. To get started, upload your notes in PDF format below.')
 
-open_ai_api_key = st.text_input('Enter your OpenAI API key here:')
-
 env_vars['SERPAPI_API_KEY'] = st.secrets['SERPAPI_API_KEY']
 
-openai.api_key = open_ai_api_key
-OPEN_API_KEY = open_ai_api_key
+openai.api_key = st.secrets['OPENAI_API_KEY']
 
 # BASIC MODEL with Prompt engineering
 def read_pdf(file_path):
@@ -226,6 +223,7 @@ file_paths = []
 for file in files:
     file_paths.append(directory_path + file.name)
 
+st.write(file_paths[0])
 
 def get_source_info(prompt):
     res, source_docs = query_langchain_model(model, prompt)
