@@ -44,7 +44,7 @@ load_dotenv(dotenv_path='../.env')
 
 # Access the values
 st.title('NotesWise')
-st.write('NotesWise is a tool that allows you to ask questions about your notes and get answers from your notes. It is powered by OpenAI\'s GPT-4 and LangChain\'s LangLearner Model. To get started, upload your notes in PDF format below.')
+st.write('NotesWise is a tool that allows you to use your notes to help you solve your problem sets! Put in your lecture notes, ask a question about your problem set, and Noteswise uses your notes as well as the internet to solve it. It is powered by OpenAI\'s GPT-4 and Langchain. To get started, upload your notes in PDF format below.')
 
 env_vars['SERPAPI_API_KEY'] = st.secrets['SERPAPI_API_KEY']
 openai.api_key = st.secrets['OPENAI_API_KEY']
