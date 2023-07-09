@@ -48,6 +48,8 @@ st.write('NotesWise is a tool that allows you to ask questions about your notes 
 
 open_ai_api_key = st.text_input('Enter your OpenAI API key here:')
 
+env_vars['SERP_API_KEY'] = st.secrets['SERP_API_KEY']
+
 openai.api_key = open_ai_api_key
 OPEN_API_KEY = open_ai_api_key
 
