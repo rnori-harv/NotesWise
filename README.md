@@ -3,6 +3,8 @@
 
 You simply upload your notes and then ask any question related to your assignment. NotesWise will use your notes to try to come up with an answer.
 
+Noteswise is live on [https://noteswise.streamlit.app/](https://noteswise.streamlit.app/). Please check it out and give me feedback!
+
 ## How to use
 
 ### Installation
