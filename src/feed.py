@@ -51,8 +51,6 @@ open_ai_api_key = st.text_input('Enter your OpenAI API key here:')
 openai.api_key = open_ai_api_key
 OPEN_API_KEY = open_ai_api_key
 
-SERPAPI_API_KEY = st.text_input('Enter your SerpAPI API key here:')
-
 # BASIC MODEL with Prompt engineering
 def read_pdf(file_path):
     with open(file_path, 'rb') as file:
