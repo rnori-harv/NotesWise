@@ -68,7 +68,7 @@ def pass_knowledge_to_openai(text):
         engine='text-davinci-003',
         prompt=prompt,
         max_tokens=100,
-        temperature=0.7,
+        temperature=1,
         n=1,
         stop=None
     )
@@ -154,7 +154,7 @@ class CustomOutputParser(AgentOutputParser):
 
 
 def llm_agent():
-    llm = OpenAI(temperature=0.1)
+    llm = OpenAI(temperature=1)
     tools = [
         Tool(name = "Check lecture notes", func = get_source_info, description = "Useful for when you need to consult information within your knowledge base. Use this before searching online."),
         Tool(name = "Search Online", func = search.run, description = "Useful for when you need to consult information when check lecture notes does not give you enough information.")
