@@ -43,11 +43,15 @@ env_vars = dotenv_values('../.env')
 load_dotenv(dotenv_path='../.env')
 
 # Access the values
-openai.api_key = env_vars['OPENAI_API_KEY']
-OPENAI_API_KEY = env_vars['OPENAI_API_KEY']
-
 st.title('NotesWise')
 st.write('NotesWise is a tool that allows you to ask questions about your notes and get answers from your notes. It is powered by OpenAI\'s GPT-4 and LangChain\'s LangLearner Model. To get started, upload your notes in PDF format below.')
+
+open_ai_api_key = st.text_input('Enter your OpenAI API key here:')
+
+openai.api_key = open_ai_api_key
+OPEN_API_KEY = open_ai_api_key
+
+SERPAPI_API_KEY = st.text_input('Enter your SerpAPI API key here:')
 
 # BASIC MODEL with Prompt engineering
 def read_pdf(file_path):
@@ -204,6 +208,7 @@ def llm_agent():
     )
     agent_executor = AgentExecutor.from_agent_and_tools(agent=agent, tools=tools, verbose=False)
     return agent_executor
+
 
 
 directory_path = st.text_input('Enter the absolute directory path of your lecture notes here:')
