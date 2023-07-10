@@ -155,10 +155,13 @@ class CustomOutputParser(AgentOutputParser):
 
 
 def llm_agent():
-    llm = OpenAI(temperature=1)
+    llm = OpenAI(temperature=0)
+    llm_math_chain = LLMMathChain.from_llm(llm=llm, verbose=True)
+    search = SerpAPIWrapper()
     tools = [
         Tool(name = "Check lecture notes", func = get_source_info, description = "Useful for when you need to consult information within your knowledge base. Use this before searching online."),
-        Tool(name = "Search Online", func = search.run, description = "Useful for when you need to consult information when check lecture notes does not give you enough information.")
+        Tool(name = "Search Online", func = search.run, description = "Useful for when you need to consult information when check lecture notes does not give you enough information."),
+         Tool(name="Calculator", func=llm_math_chain.run, description="useful for when you need to answer questions about math")
     ]
 
     # agent = initialize_agent(tools, llm, verbose=True)
@@ -203,8 +206,22 @@ def llm_agent():
         stop=["\nObservation:"], 
         allowed_tools=tool_names
     )
-    agent_executor = AgentExecutor.from_agent_and_tools(agent=agent, tools=tools, verbose=False)
-    return agent_executor
+    # agent_executor = AgentExecutor.from_agent_and_tools(agent=agent, tools=tools, verbose=False)
+    # return agent_executor
+    
+    
+    
+    model = ChatOpenAI(temperature=0, model = "gpt-4")
+
+    planner = load_chat_planner(model)
+
+    executor = load_agent_executor(model, tools, verbose=True)
+
+    planner_agent = PlanAndExecute(planner=planner, executor=executor, verbose=True)
+
+
+    return planner_agent
+
 
 
 files = st.file_uploader("Upload your lecture note files (PDF)", type=["pdf"], accept_multiple_files=True)
@@ -240,13 +257,17 @@ if prompt != '':
     res, source_docs = query_langchain_model(model, prompt)
     st.markdown("<h1 style='text-align: center; color: green; font-family: sans-serif'>Answer from knowledge base:</h1>", unsafe_allow_html=True)
     st.write(res)
+    st.markdown("<h2 style='text-align: center; color: orange; font-family: sans-serif'>Lecture notes consulted:</h2>", unsafe_allow_html=True)
     st.write("Source information consulted:")
     information_consulted = []
     for doc in source_docs:
         information_consulted.append(doc.page_content)
-        st.write(doc.metadata["source"] + ", Page " + str(doc.metadata["page"]))
+        source_loc = doc.metadata["source"] + ", Page " + str(doc.metadata["page"])
+        st.markdown(f"<p style='text-align: center; color: orange; font-family: sans-serif'>{source_loc}</p>", unsafe_allow_html=True)
 
     my_agent = llm_agent()
+    full_prompt = prompt + "\n" + "Note that this is the user's original question when you are done. Don't ask the user for questions, search the lecture notes or online if you have them."
+
     ans = my_agent.run(prompt)
     st.markdown("<h1 style='text-align: center; color: green; font-family: sans-serif'>Answer from Agent:</h1>", unsafe_allow_html=True)
     st.write(ans)
