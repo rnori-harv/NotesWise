@@ -6,7 +6,7 @@ from langchain import SerpAPIWrapper
 import pypdf
 import time
 import re
-from io import StringIO
+from io import BytesIO
 from typing import List, Union
 
 
@@ -15,6 +15,7 @@ from langchain.document_loaders import PyPDFLoader
 from langchain.indexes import VectorstoreIndexCreator
 from langchain.chains import RetrievalQA
 from langchain.llms import OpenAI
+from langchain.chat_models import ChatOpenAI
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
@@ -22,9 +23,12 @@ from langchain.prompts import PromptTemplate, BaseChatPromptTemplate
 from langchain.chains import LLMChain
 from langchain.agents import load_tools, Tool, AgentOutputParser
 from langchain.agents import initialize_agent
-from langchain.schema import HumanMessage
+from langchain.schema import HumanMessage, Document
+from langchain import LLMMathChain
+
 
 from langchain.agents import Tool, AgentExecutor, LLMSingleActionAgent, AgentOutputParser
+from langchain.experimental.plan_and_execute import PlanAndExecute, load_agent_executor, load_chat_planner
 from langchain.prompts import BaseChatPromptTemplate, ChatPromptTemplate
 from langchain import SerpAPIWrapper, LLMChain
 from langchain.schema import AgentAction, AgentFinish, HumanMessage, SystemMessage
@@ -44,12 +48,12 @@ load_dotenv(dotenv_path='../.env')
 
 # Access the values
 st.title('NotesWise')
-st.write('NotesWise is a tool that allows you to ask questions about your notes and get answers from your notes. It is powered by OpenAI\'s GPT-4 and Langchain. To get started, upload your notes in PDF format below.')
+st.write('NotesWise is a tool that allows you to use your notes to help you solve your problem sets! Put in your lecture notes, ask a question about your problem set, and Noteswise uses your notes as well as the internet to solve it. It is powered by OpenAI\'s GPT-4 and Langchain. To get started, upload your notes in PDF format below.')
 
-open_ai_api_key = st.text_input('Enter your OpenAI API key here:')
-
-openai.api_key = open_ai_api_key
-OPEN_API_KEY = open_ai_api_key
+# env_vars['SERPAPI_API_KEY'] = st.secrets['SERPAPI_API_KEY']
+# openai.organization = st.secrets['OPENAI_ORG']
+# openai.api_key = st.secrets['OPENAI_API_KEY']
+openai.api_key = env_vars['OPENAI_API_KEY']
 
 # BASIC MODEL with Prompt engineering
 def read_pdf(file_path):
@@ -78,13 +82,11 @@ def pass_knowledge_to_openai(text):
     return generated_text
 
 
-def load_langchain_model(file_paths):
-    documents = [PyPDFLoader(file_path).load_and_split()[0] for file_path in file_paths]
-
+def load_langchain_model(docs):
     # select which embeddings we want to use
     embeddings = OpenAIEmbeddings()
     # create the vectorestore to use as the index
-    db = Chroma.from_documents(documents, embeddings)
+    db = Chroma.from_documents(docs, embeddings)
     # expose this index in a retriever interface
     retriever = db.as_retriever(search_type="similarity", search_kwargs={"k":2})
     # create a chain to answer questions 
@@ -95,8 +97,6 @@ def load_langchain_model(file_paths):
 def query_langchain_model(model, query):
     ans = model({"query": query})
     return ans["result"], ans["source_documents"]
-
-search = SerpAPIWrapper()
 
 # Set up a prompt template
 class CustomPromptTemplate(BaseChatPromptTemplate):
@@ -156,10 +156,13 @@ class CustomOutputParser(AgentOutputParser):
 
 
 def llm_agent():
-    llm = OpenAI(temperature=1)
+    llm = OpenAI(temperature=0)
+    llm_math_chain = LLMMathChain.from_llm(llm=llm, verbose=True)
+    search = SerpAPIWrapper()
     tools = [
         Tool(name = "Check lecture notes", func = get_source_info, description = "Useful for when you need to consult information within your knowledge base. Use this before searching online."),
-        Tool(name = "Search Online", func = search.run, description = "Useful for when you need to consult information when check lecture notes does not give you enough information.")
+        Tool(name = "Search Online", func = search.run, description = "Useful for when you need to consult information when check lecture notes does not give you enough information."),
+         Tool(name="Calculator", func=llm_math_chain.run, description="useful for when you need to answer questions about math")
     ]
 
     # agent = initialize_agent(tools, llm, verbose=True)
@@ -204,26 +207,37 @@ def llm_agent():
         stop=["\nObservation:"], 
         allowed_tools=tool_names
     )
-    agent_executor = AgentExecutor.from_agent_and_tools(agent=agent, tools=tools, verbose=False)
-    return agent_executor
+    # agent_executor = AgentExecutor.from_agent_and_tools(agent=agent, tools=tools, verbose=False)
+    # return agent_executor
+    
+    
+    
+    model = ChatOpenAI(temperature=0, model = "gpt-4")
+
+    planner = load_chat_planner(model)
+
+    executor = load_agent_executor(model, tools, verbose=True)
+
+    planner_agent = PlanAndExecute(planner=planner, executor=executor, verbose=True)
 
 
+    return planner_agent
 
-directory_path = st.text_input('Enter the absolute directory path of your lecture notes here:')
-
-while directory_path == '':
-    time.sleep(0.5)
-
-if directory_path[-1] != '/':
-    directory_path += '/'
 
 files = st.file_uploader("Upload your lecture note files (PDF)", type=["pdf"], accept_multiple_files=True)
 while files == []:
     time.sleep(0.5)
-file_paths = []
+pdf_files = []
+docs = []
 for file in files:
-    file_paths.append(directory_path + file.name)
-
+    reader = PyPDF2.PdfReader(BytesIO(file.read()))
+    file_content = []
+    for page_num in range(len(reader.pages)):
+        page = reader.pages[page_num]
+        page_content = page.extract_text().splitlines()
+        page_content_str = ''.join(page_content)
+        curr_doc = Document(page_content=page_content_str, metadata={"source": file.name, "page": page_num + 1})
+        docs.append(curr_doc)
 
 def get_source_info(prompt):
     res, source_docs = query_langchain_model(model, prompt)
@@ -235,7 +249,7 @@ def get_source_info(prompt):
 
 
 
-model = load_langchain_model(file_paths)
+model = load_langchain_model(docs)
 
 # User input
 prompt = st.text_input('Enter your question here:')
@@ -243,13 +257,17 @@ if prompt != '':
     res, source_docs = query_langchain_model(model, prompt)
     st.markdown("<h1 style='text-align: center; color: green; font-family: sans-serif'>Answer from knowledge base:</h1>", unsafe_allow_html=True)
     st.write(res)
+    st.markdown("<h2 style='text-align: center; color: orange; font-family: sans-serif'>Lecture notes consulted:</h2>", unsafe_allow_html=True)
     st.write("Source information consulted:")
     information_consulted = []
     for doc in source_docs:
         information_consulted.append(doc.page_content)
-        st.write(doc.metadata["source"] + ", Page " + str(doc.metadata["page"] + 1))
+        source_loc = doc.metadata["source"] + ", Page " + str(doc.metadata["page"])
+        st.markdown(f"<p style='text-align: center; color: orange; font-family: sans-serif'>{source_loc}</p>", unsafe_allow_html=True)
 
     my_agent = llm_agent()
+    full_prompt = prompt + "\n" + "Note that this is the user's original question when you are done. Don't ask the user for questions, search the lecture notes or online if you have them."
+
     ans = my_agent.run(prompt)
     st.markdown("<h1 style='text-align: center; color: green; font-family: sans-serif'>Answer from Agent:</h1>", unsafe_allow_html=True)
     st.write(ans)
