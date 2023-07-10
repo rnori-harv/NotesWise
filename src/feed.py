@@ -25,6 +25,7 @@ from langchain.agents import initialize_agent
 from langchain.schema import HumanMessage, Document
 
 from langchain.agents import Tool, AgentExecutor, LLMSingleActionAgent, AgentOutputParser
+from langchain.experimental.plan_and_execute import PlanAndExecute, load_agent_executor, load_chat_planner
 from langchain.prompts import BaseChatPromptTemplate, ChatPromptTemplate
 from langchain import SerpAPIWrapper, LLMChain
 from langchain.schema import AgentAction, AgentFinish, HumanMessage, SystemMessage
@@ -47,6 +48,7 @@ st.title('NotesWise')
 st.write('NotesWise is a tool that allows you to use your notes to help you solve your problem sets! Put in your lecture notes, ask a question about your problem set, and Noteswise uses your notes as well as the internet to solve it. It is powered by OpenAI\'s GPT-4 and Langchain. To get started, upload your notes in PDF format below.')
 
 env_vars['SERPAPI_API_KEY'] = st.secrets['SERPAPI_API_KEY']
+openai.organization = st.secrets['OPENAI_ORG']
 openai.api_key = st.secrets['OPENAI_API_KEY']
 # openai.api_key = env_vars['OPENAI_API_KEY']
 
