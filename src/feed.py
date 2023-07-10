@@ -23,6 +23,7 @@ from langchain.chains import LLMChain
 from langchain.agents import load_tools, Tool, AgentOutputParser
 from langchain.agents import initialize_agent
 from langchain.schema import HumanMessage, Document
+from langchain import LLMMathChain
 
 from langchain.agents import Tool, AgentExecutor, LLMSingleActionAgent, AgentOutputParser
 from langchain.experimental.plan_and_execute import PlanAndExecute, load_agent_executor, load_chat_planner
