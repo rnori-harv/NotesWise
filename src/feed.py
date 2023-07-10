@@ -207,8 +207,8 @@ def llm_agent():
         stop=["\nObservation:"], 
         allowed_tools=tool_names
     )
-    # agent_executor = AgentExecutor.from_agent_and_tools(agent=agent, tools=tools, verbose=False)
-    # return agent_executor
+    agent_executor = AgentExecutor.from_agent_and_tools(agent=agent, tools=tools, verbose=False)
+    return agent_executor
     
     
     
