@@ -231,6 +231,8 @@ while files == []:
     time.sleep(0.5)
 pdf_files = []
 docs = []
+message = st.empty()
+message.write("Reading your notes...")
 for file in files:
     reader = PyPDF2.PdfReader(BytesIO(file.read()))
     file_content = []
@@ -240,6 +242,8 @@ for file in files:
         page_content_str = ''.join(page_content)
         curr_doc = Document(page_content=page_content_str, metadata={"source": file.name, "page": page_num + 1})
         docs.append(curr_doc)
+
+message.empty()
 
 def get_source_info(prompt):
     res, source_docs = query_langchain_model(model, prompt)
@@ -260,7 +264,6 @@ if prompt != '':
     st.markdown("<h1 style='text-align: center; color: green; font-family: sans-serif'>Answer from knowledge base:</h1>", unsafe_allow_html=True)
     st.write(res)
     st.markdown("<h2 style='text-align: center; color: orange; font-family: sans-serif'>Lecture notes consulted:</h2>", unsafe_allow_html=True)
-    st.write("Source information consulted:")
     information_consulted = []
     for doc in source_docs:
         information_consulted.append(doc.page_content)
