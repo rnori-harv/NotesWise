@@ -1,9 +1,7 @@
 import PyPDF2
-from dotenv import dotenv_values, load_dotenv, find_dotenv
+from dotenv import dotenv_values, load_dotenv
 import openai
-import langchain
 from langchain import SerpAPIWrapper
-import pypdf
 import time
 import re
 from io import BytesIO
@@ -11,11 +9,8 @@ from typing import List, Union
 
 
 
-from langchain.document_loaders import PyPDFLoader
-from langchain.indexes import VectorstoreIndexCreator
 from langchain.chains import RetrievalQA
 from langchain.llms import OpenAI
-from langchain.text_splitter import CharacterTextSplitter
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
 from langchain.prompts import PromptTemplate, BaseChatPromptTemplate
