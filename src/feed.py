@@ -48,7 +48,7 @@ load_dotenv(dotenv_path='../.env')
 st.title('NotesWise')
 st.write('NotesWise is a tool that allows you to use your notes to help you solve your problem sets! Put in your lecture notes, ask a question about your problem set, and Noteswise uses your notes as well as the internet to solve it. It is powered by OpenAI\'s GPT-4 and Langchain. To get started, upload your notes in PDF format below.')
 
-env_vars['SERPAPI_API_KEY'] = st.secrets['SERPAPI_API_KEY']
+# env_vars['SERPAPI_API_KEY'] = st.secrets['SERPAPI_API_KEY']
 openai.organization = st.secrets['OPENAI_ORG']
 openai.api_key = st.secrets['OPENAI_API_KEY']
 # openai.api_key = env_vars['OPENAI_API_KEY']
@@ -198,7 +198,6 @@ def llm_agent():
     # Using tools, the LLM chain and output_parser to make an agent
     tool_names = [tool.name for tool in tools]
     output_parser = CustomOutputParser()
-
     agent = LLMSingleActionAgent(
         llm_chain=llm_chain, 
         output_parser=output_parser,
@@ -208,23 +207,14 @@ def llm_agent():
         allowed_tools=tool_names
     )
     agent_executor = AgentExecutor.from_agent_and_tools(agent=agent, tools=tools, verbose=False)
+
     return agent_executor
-    
-    
-    
     # model = ChatOpenAI(temperature=0, model = "gpt-4")
-    model = ChatOpenAI(temperature=0, model = "gpt-3.5-turbo-16k")
-
-    planner = load_chat_planner(model)
-
-    executor = load_agent_executor(model, tools, verbose=True)
-
-    planner_agent = PlanAndExecute(planner=planner, executor=executor, verbose=True)
-
-
-    return planner_agent
-
-
+    # model = ChatOpenAI(temperature=0, model = "gpt-3.5-turbo-16k")
+    # planner = load_chat_planner(model)
+    # executor = load_agent_executor(model, tools, verbose=True)
+    # planner_agent = PlanAndExecute(planner=planner, executor=executor, verbose=True)
+    # return planner_agent
 
 files = st.file_uploader("Upload your lecture note files (PDF)", type=["pdf"], accept_multiple_files=True)
 while files == []:
