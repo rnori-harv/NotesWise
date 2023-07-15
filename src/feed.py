@@ -85,14 +85,15 @@ def generate_prompt(prompt, source_info):
     """
     return prompt
 
-search = SerpAPIWrapper()
+
 
 def llm_agent():
+    search = SerpAPIWrapper()
     llm = OpenAI(temperature=0, model = GPT_MODEL_VERSION)
     llm_math_chain = LLMMathChain.from_llm(llm=llm, verbose=True)
     tools = [
         Tool(name = "Check lecture notes", func = get_source_info, description = "Useful for when you need to consult information within your knowledge base. Use this before searching online."),
-        Tool(name = "Search Online", func = search.run, description = "Useful for when you need to consult information when check lecture notes does not give you enough information."),
+        Tool(name = "Search Online", func = search.run, description = "Useful for when you need to consult extra information not found in the lecture notes."),
          Tool(name="Calculator", func=llm_math_chain.run, description="useful for when you need to answer questions about math")
     ]
     openai_model = ChatOpenAI(temperature=0, model = GPT_MODEL_VERSION)
@@ -105,20 +106,26 @@ def llm_agent():
 files = st.file_uploader("Upload your lecture note files (PDF)", type=["pdf"], accept_multiple_files=True)
 while files == []:
     time.sleep(0.5)
-pdf_files = []
-docs = []
-with st.spinner('Reading your notes...'):
-    for file in files:
-        reader = PyPDF2.PdfReader(BytesIO(file.read()))
-        file_content = []
-        for page_num in range(len(reader.pages)):
-            page = reader.pages[page_num]
-            page_content = page.extract_text().splitlines()
-            page_content_str = ''.join(page_content)
-            curr_doc = Document(page_content=page_content_str, metadata={"source": file.name, "page": page_num + 1})
-            docs.append(curr_doc)
-    model = load_langchain_model(docs)
-    my_agent = llm_agent()
+
+@st.cache_resource(show_spinner=False)
+def setup_ta():
+    docs = []
+    with st.spinner('Reading your notes...'):
+        for file in files:
+            reader = PyPDF2.PdfReader(BytesIO(file.read()))
+            for page_num in range(len(reader.pages)):
+                page = reader.pages[page_num]
+                page_content = page.extract_text().splitlines()
+                page_content_str = ''.join(page_content)
+                curr_doc = Document(page_content=page_content_str, metadata={"source": file.name, "page": page_num + 1})
+                docs.append(curr_doc)
+    with st.spinner('Preparing your TA'):
+        model = load_langchain_model(docs)
+        my_agent = llm_agent()
+        return model, my_agent
+        
+
+model, my_agent = setup_ta()
 
 
 # User input
