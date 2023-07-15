@@ -63,8 +63,6 @@ def query_langchain_model(model, query):
     ans = model({"query": query})
     return ans["result"], ans["source_documents"]
 
-search = SerpAPIWrapper()
-
 def get_source_info(prompt):
     res, source_docs = query_langchain_model(model, prompt)
     information_consulted = []
@@ -84,6 +82,7 @@ def generate_prompt(prompt, source_info):
     """
     return prompt
 
+search = SerpAPIWrapper()
 
 def llm_agent():
     llm = OpenAI(temperature=0)
@@ -93,12 +92,11 @@ def llm_agent():
         Tool(name = "Search Online", func = search.run, description = "Useful for when you need to consult information when check lecture notes does not give you enough information."),
          Tool(name="Calculator", func=llm_math_chain.run, description="useful for when you need to answer questions about math")
     ]
-    model = ChatOpenAI(temperature=0, model = "gpt-4")
-    planner = load_chat_planner(model)
-    executor = load_agent_executor(model, tools, verbose=True)
+    openai_model = ChatOpenAI(temperature=0, model = "gpt-4")
+    planner = load_chat_planner(openai_model)
+    executor = load_agent_executor(openai_model, tools, verbose=True)
     planner_agent = PlanAndExecute(planner=planner, executor=executor, verbose=True)
     return planner_agent
-
 
 
 files = st.file_uploader("Upload your lecture note files (PDF)", type=["pdf"], accept_multiple_files=True)
@@ -106,30 +104,19 @@ while files == []:
     time.sleep(0.5)
 pdf_files = []
 docs = []
-message = st.empty()
-message.write("Reading your notes...")
-for file in files:
-    reader = PyPDF2.PdfReader(BytesIO(file.read()))
-    file_content = []
-    for page_num in range(len(reader.pages)):
-        page = reader.pages[page_num]
-        page_content = page.extract_text().splitlines()
-        page_content_str = ''.join(page_content)
-        curr_doc = Document(page_content=page_content_str, metadata={"source": file.name, "page": page_num + 1})
-        docs.append(curr_doc)
+with st.spinner('Reading your notes...'):
+    for file in files:
+        reader = PyPDF2.PdfReader(BytesIO(file.read()))
+        file_content = []
+        for page_num in range(len(reader.pages)):
+            page = reader.pages[page_num]
+            page_content = page.extract_text().splitlines()
+            page_content_str = ''.join(page_content)
+            curr_doc = Document(page_content=page_content_str, metadata={"source": file.name, "page": page_num + 1})
+            docs.append(curr_doc)
+    model = load_langchain_model(docs)
+    my_agent = llm_agent()
 
-message.empty()
-
-def get_source_info(prompt):
-    res, source_docs = query_langchain_model(model, prompt)
-    information_consulted = ""
-    for doc in source_docs:
-        information_consulted += doc.page_content
-    return information_consulted
-
-
-model = load_langchain_model(docs)
-my_agent = llm_agent()
 
 # User input
 prompt = st.text_area('Enter your question here:')
@@ -144,7 +131,6 @@ if prompt != '':
         source_loc = doc.metadata["source"] + ", Page " + str(doc.metadata["page"])
         st.markdown(f"<p style='text-align: center; color: orange; font-family: sans-serif'>{source_loc}</p>", unsafe_allow_html=True)
 
-    my_agent = llm_agent()
     full_prompt = generate_prompt(prompt, information_consulted)
     ans = my_agent.run(full_prompt)
     st.markdown("<h1 style='text-align: center; color: green; font-family: sans-serif'>Answer from Agent:</h1>", unsafe_allow_html=True)
