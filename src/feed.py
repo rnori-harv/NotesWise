@@ -1,22 +1,17 @@
 import PyPDF2
-from dotenv import dotenv_values, load_dotenv, find_dotenv
+from dotenv import dotenv_values, load_dotenv
 import openai
-import langchain
 from langchain import SerpAPIWrapper
-import pypdf
 import time
 import re
 from io import BytesIO
 from typing import List, Union
+import os
 
 
 
-from langchain.document_loaders import PyPDFLoader
-from langchain.indexes import VectorstoreIndexCreator
 from langchain.chains import RetrievalQA
 from langchain.llms import OpenAI
-from langchain.chat_models import ChatOpenAI
-from langchain.text_splitter import CharacterTextSplitter
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
 from langchain.prompts import PromptTemplate, BaseChatPromptTemplate
@@ -26,62 +21,35 @@ from langchain.agents import initialize_agent
 from langchain.schema import HumanMessage, Document
 from langchain import LLMMathChain
 
-
 from langchain.agents import Tool, AgentExecutor, LLMSingleActionAgent, AgentOutputParser
 from langchain.experimental.plan_and_execute import PlanAndExecute, load_agent_executor, load_chat_planner
 from langchain.prompts import BaseChatPromptTemplate, ChatPromptTemplate
 from langchain import SerpAPIWrapper, LLMChain
 from langchain.schema import AgentAction, AgentFinish, HumanMessage, SystemMessage
-# LLM wrapper
 from langchain.chat_models import ChatOpenAI
+# LLM wrapper
 from langchain import OpenAI
 # Conversational memory
-from langchain.memory import ConversationBufferWindowMemory
 # Embeddings and vectorstore
 from langchain.embeddings.openai import OpenAIEmbeddings
-from langchain.vectorstores import Pinecone
 
-import streamlit as st  
-
-env_vars = dotenv_values('../.env')
-load_dotenv(dotenv_path='../.env')
+import streamlit as st
+import os
 
 # Access the values
 st.title('NotesWise')
 st.write('NotesWise is a tool that allows you to use your notes to help you solve your problem sets! Put in your lecture notes, ask a question about your problem set, and Noteswise uses your notes as well as the internet to solve it. It is powered by OpenAI\'s GPT-4 and Langchain. To get started, upload your notes in PDF format below.')
 
-# env_vars['SERPAPI_API_KEY'] = st.secrets['SERPAPI_API_KEY']
-# openai.organization = st.secrets['OPENAI_ORG']
-# openai.api_key = st.secrets['OPENAI_API_KEY']
-openai.api_key = env_vars['OPENAI_API_KEY']
+os.environ["SERPAPI_API_KEY"] = st.secrets["SERPAPI_API_KEY"]
+
+GPT_MODEL_VERSION = 'gpt-4'
+if 'OPENAI_ORG' in st.secrets:
+    openai.organization = st.secrets['OPENAI_ORG']
+    GPT_MODEL_VERSION = 'gpt-3.5-turbo-16k-0613'
+
+openai.api_key = st.secrets['OPENAI_API_KEY']
 
 # BASIC MODEL with Prompt engineering
-def read_pdf(file_path):
-    with open(file_path, 'rb') as file:
-        reader = PyPDF2.PdfReader(file)
-        num_pages = len(reader.pages)
-        ans = ""
-
-        for page_number in range(num_pages):
-            page = reader.pages[page_number]
-            text = page.extract_text()
-            ans += text
-        return ans
-
-def pass_knowledge_to_openai(text):
-    prompt = "You have been given information" 
-    response = openai.Completion.create(
-        engine='text-davinci-003',
-        prompt=prompt,
-        max_tokens=100,
-        temperature=1,
-        n=1,
-        stop=None
-    )
-    generated_text = response.choices[0].text.strip()
-    return generated_text
-
-
 def load_langchain_model(docs):
     # select which embeddings we want to use
     embeddings = OpenAIEmbeddings()
@@ -98,129 +66,39 @@ def query_langchain_model(model, query):
     ans = model({"query": query})
     return ans["result"], ans["source_documents"]
 
+def get_source_info(prompt):
+    res, source_docs = query_langchain_model(model, prompt)
+    information_consulted = []
+    for doc in source_docs:
+        information_consulted.append(doc.page_content)
+    return information_consulted
+
 # Set up a prompt template
-class CustomPromptTemplate(BaseChatPromptTemplate):
-    # The template to use
-    template: str
-    # The list of tools available
-    tools: List[Tool]
-    
-    def format_messages(self, **kwargs) -> str:
-        # Get the intermediate steps (AgentAction, Observation tuples)
-        
-        # Format them in a particular way
-        intermediate_steps = kwargs.pop("intermediate_steps")
-        thoughts = ""
-        for action, observation in intermediate_steps:
-            thoughts += action.log
-            thoughts += f"\nObservation: {observation}\nThought: "
-            
-        # Set the agent_scratchpad variable to that value
-        kwargs["agent_scratchpad"] = thoughts
-        
-        # Create a tools variable from the list of tools provided
-        kwargs["tools"] = "\n".join([f"{tool.name}: {tool.description}" for tool in self.tools])
-        
-        # Create a list of tool names for the tools provided
-        kwargs["tool_names"] = ", ".join([tool.name for tool in self.tools])
-        formatted = self.template.format(**kwargs)
-        return [HumanMessage(content=formatted)]
+def generate_prompt(prompt, source_info):
+    prompt = f"""
+    Please help the student solve the following problem set question in a step by step format using the source information provided.
+    Question:
+    {prompt}
+    Source information:
+    {source_info}
+    Answer:
+    """
+    return prompt
 
-class CustomOutputParser(AgentOutputParser):
-    
-    def parse(self, llm_output: str) -> Union[AgentAction, AgentFinish]:
-        
-        # Check if agent should finish
-        if "Final Answer:" in llm_output:
-            return AgentFinish(
-                # Return values is generally always a dictionary with a single `output` key
-                # It is not recommended to try anything else at the moment :)
-                return_values={"output": llm_output.split("Final Answer:")[-1].strip()},
-                log=llm_output,
-            )
-        
-        # Parse out the action and action input
-        regex = r"Action: (.*?)[\n]*Action Input:[\s]*(.*)"
-        match = re.search(regex, llm_output, re.DOTALL)
-        
-        # If it can't parse the output it raises an error
-        # You can add your own logic here to handle errors in a different way i.e. pass to a human, give a canned response
-        if not match:
-            raise ValueError(f"Could not parse LLM output: `{llm_output}`")
-        action = match.group(1).strip()
-        action_input = match.group(2)
-        
-        # Return the action and action input
-        return AgentAction(tool=action, tool_input=action_input.strip(" ").strip('"'), log=llm_output)
-    
-
+search = SerpAPIWrapper()
 
 def llm_agent():
-    llm = OpenAI(temperature=0)
+    llm = OpenAI(temperature=0, model = GPT_MODEL_VERSION)
     llm_math_chain = LLMMathChain.from_llm(llm=llm, verbose=True)
-    search = SerpAPIWrapper()
     tools = [
         Tool(name = "Check lecture notes", func = get_source_info, description = "Useful for when you need to consult information within your knowledge base. Use this before searching online."),
         Tool(name = "Search Online", func = search.run, description = "Useful for when you need to consult information when check lecture notes does not give you enough information."),
          Tool(name="Calculator", func=llm_math_chain.run, description="useful for when you need to answer questions about math")
     ]
-
-    # agent = initialize_agent(tools, llm, verbose=True)
-
-    my_template = """Answer the following questions as best you can, but speaking as a tutor would speak. You have access to the following tools:
-                {tools}
-
-                Use the following format:
-
-                Question: the input question you must answer
-                Thought: you should always think about what to do
-                Action: the action to take, should be one of [{tool_names}]
-                Action Input: the input to the action
-                Observation: the result of the action
-                ... (this Thought/Action/Action Input/Observation can repeat N times)
-                Thought: I now know the final answer
-                Final Answer: the final answer to the original input question
-
-                Begin! Remember to speak as a teaching assistant when giving your final answer.
-
-                Question: {input}
-                {agent_scratchpad}"""
-
-    prompt = CustomPromptTemplate(
-                template=my_template,
-                tools=tools,
-                # This omits the `agent_scratchpad`, `tools`, and `tool_names` variables because those are generated dynamically
-                # This includes the `intermediate_steps` variable because that is needed
-                input_variables=["input", "intermediate_steps"],
-            )
-    llm_chain = LLMChain(llm=llm, prompt=prompt)
-
-    # Using tools, the LLM chain and output_parser to make an agent
-    tool_names = [tool.name for tool in tools]
-    output_parser = CustomOutputParser()
-
-    agent = LLMSingleActionAgent(
-        llm_chain=llm_chain, 
-        output_parser=output_parser,
-        # We use "Observation" as our stop sequence so it will stop when it receives Tool output
-        # If you change your prompt template you'll need to adjust this as well
-        stop=["\nObservation:"], 
-        allowed_tools=tool_names
-    )
-    # agent_executor = AgentExecutor.from_agent_and_tools(agent=agent, tools=tools, verbose=False)
-    # return agent_executor
-    
-    
-    
-    model = ChatOpenAI(temperature=0, model = "gpt-4")
-
-    planner = load_chat_planner(model)
-
-    executor = load_agent_executor(model, tools, verbose=True)
-
+    openai_model = ChatOpenAI(temperature=0, model = GPT_MODEL_VERSION)
+    planner = load_chat_planner(openai_model)
+    executor = load_agent_executor(openai_model, tools, verbose=True)
     planner_agent = PlanAndExecute(planner=planner, executor=executor, verbose=True)
-
-
     return planner_agent
 
 
@@ -229,46 +107,35 @@ while files == []:
     time.sleep(0.5)
 pdf_files = []
 docs = []
-for file in files:
-    reader = PyPDF2.PdfReader(BytesIO(file.read()))
-    file_content = []
-    for page_num in range(len(reader.pages)):
-        page = reader.pages[page_num]
-        page_content = page.extract_text().splitlines()
-        page_content_str = ''.join(page_content)
-        curr_doc = Document(page_content=page_content_str, metadata={"source": file.name, "page": page_num + 1})
-        docs.append(curr_doc)
+with st.spinner('Reading your notes...'):
+    for file in files:
+        reader = PyPDF2.PdfReader(BytesIO(file.read()))
+        file_content = []
+        for page_num in range(len(reader.pages)):
+            page = reader.pages[page_num]
+            page_content = page.extract_text().splitlines()
+            page_content_str = ''.join(page_content)
+            curr_doc = Document(page_content=page_content_str, metadata={"source": file.name, "page": page_num + 1})
+            docs.append(curr_doc)
+    model = load_langchain_model(docs)
+    my_agent = llm_agent()
 
-def get_source_info(prompt):
-    res, source_docs = query_langchain_model(model, prompt)
-    information_consulted = []
-    for doc in source_docs:
-        information_consulted.append(doc.page_content)
-    return information_consulted
-
-
-
-
-model = load_langchain_model(docs)
 
 # User input
-prompt = st.text_input('Enter your question here:')
+prompt = st.text_area('Enter your question here:')
 if prompt != '':
     res, source_docs = query_langchain_model(model, prompt)
     st.markdown("<h1 style='text-align: center; color: green; font-family: sans-serif'>Answer from knowledge base:</h1>", unsafe_allow_html=True)
     st.write(res)
     st.markdown("<h2 style='text-align: center; color: orange; font-family: sans-serif'>Lecture notes consulted:</h2>", unsafe_allow_html=True)
-    st.write("Source information consulted:")
     information_consulted = []
     for doc in source_docs:
         information_consulted.append(doc.page_content)
         source_loc = doc.metadata["source"] + ", Page " + str(doc.metadata["page"])
         st.markdown(f"<p style='text-align: center; color: orange; font-family: sans-serif'>{source_loc}</p>", unsafe_allow_html=True)
 
-    my_agent = llm_agent()
-    full_prompt = prompt + "\n" + "Note that this is the user's original question when you are done. Don't ask the user for questions, search the lecture notes or online if you have them."
-
-    ans = my_agent.run(prompt)
+    full_prompt = generate_prompt(prompt, information_consulted)
+    ans = my_agent.run(full_prompt)
     st.markdown("<h1 style='text-align: center; color: green; font-family: sans-serif'>Answer from Agent:</h1>", unsafe_allow_html=True)
     st.write(ans)
 
