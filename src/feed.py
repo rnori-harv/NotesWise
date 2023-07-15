@@ -6,6 +6,7 @@ import time
 import re
 from io import BytesIO
 from typing import List, Union
+import os
 
 
 
@@ -33,18 +34,20 @@ from langchain import OpenAI
 from langchain.embeddings.openai import OpenAIEmbeddings
 
 import streamlit as st
-
-env_vars = dotenv_values('../.env')
-load_dotenv(dotenv_path='../.env')
+import os
 
 # Access the values
 st.title('NotesWise')
 st.write('NotesWise is a tool that allows you to use your notes to help you solve your problem sets! Put in your lecture notes, ask a question about your problem set, and Noteswise uses your notes as well as the internet to solve it. It is powered by OpenAI\'s GPT-4 and Langchain. To get started, upload your notes in PDF format below.')
 
-# env_vars['SERPAPI_API_KEY'] = st.secrets['SERPAPI_API_KEY']
-# openai.organization = st.secrets['OPENAI_ORG']
-# openai.api_key = st.secrets['OPENAI_API_KEY']
-openai.api_key = env_vars['OPENAI_API_KEY']
+os.environ["SERPAPI_API_KEY"] = st.secrets["SERPAPI_API_KEY"]
+
+GPT_MODEL_VERSION = 'gpt-4'
+if 'OPENAI_ORG' in st.secrets:
+    openai.organization = st.secrets['OPENAI_ORG']
+    GPT_MODEL_VERSION = 'gpt-3.5-turbo-16k-0613'
+
+openai.api_key = st.secrets['OPENAI_API_KEY']
 
 # BASIC MODEL with Prompt engineering
 def load_langchain_model(docs):
@@ -85,14 +88,14 @@ def generate_prompt(prompt, source_info):
 search = SerpAPIWrapper()
 
 def llm_agent():
-    llm = OpenAI(temperature=0)
+    llm = OpenAI(temperature=0, model = GPT_MODEL_VERSION)
     llm_math_chain = LLMMathChain.from_llm(llm=llm, verbose=True)
     tools = [
         Tool(name = "Check lecture notes", func = get_source_info, description = "Useful for when you need to consult information within your knowledge base. Use this before searching online."),
         Tool(name = "Search Online", func = search.run, description = "Useful for when you need to consult information when check lecture notes does not give you enough information."),
          Tool(name="Calculator", func=llm_math_chain.run, description="useful for when you need to answer questions about math")
     ]
-    openai_model = ChatOpenAI(temperature=0, model = "gpt-4")
+    openai_model = ChatOpenAI(temperature=0, model = GPT_MODEL_VERSION)
     planner = load_chat_planner(openai_model)
     executor = load_agent_executor(openai_model, tools, verbose=True)
     planner_agent = PlanAndExecute(planner=planner, executor=executor, verbose=True)
