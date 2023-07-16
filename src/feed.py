@@ -76,7 +76,8 @@ def query_langchain_model(model, query):
     return ans["result"], ans["source_documents"]
 
 def get_source_info(prompt):
-    st.write(prompt)
+    if prompt == "":
+        return "Please provide a non-empty prompt."
     res, source_docs = query_langchain_model(model, prompt)
     information_consulted = []
     for doc in source_docs:
@@ -86,11 +87,11 @@ def get_source_info(prompt):
 # Set up a prompt template
 def generate_prompt(prompt, source_info):
     prompt = f"""
-    Please help the student solve the following problem set question in a step by step format using the source information provided.
-    Question:
-    {prompt}
+    Please answer the student's question in a step by step manner with clear explanation using the source information provided.
     Source information:
     {source_info}
+    Student's question:
+    {prompt}
     Answer:
     """
     return prompt
@@ -102,7 +103,7 @@ def llm_agent():
     llm = ChatOpenAI(temperature=0, model = GPT_MODEL_VERSION)
     llm_math_chain = LLMMathChain.from_llm(llm=llm, verbose=True)
     tools = [
-        Tool(name = "Check lecture notes", func = get_source_info, description = "Useful for when you need to consult information within your knowledge base. Use this before searching online."),
+        Tool(name = "Check lecture notes", func = get_source_info, description = "Useful for when you need to consult information within your knowledge base. Provide a non-empty query as the argument to this. Use this before searching online."),
         Tool(name = "Search Online", func = search.run, description = "Useful for when you need to consult extra information not found in the lecture notes."),
          Tool(name="Calculator", func=llm_math_chain.run, description="useful for when you need to answer questions about math")
     ]
