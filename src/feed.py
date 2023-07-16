@@ -76,6 +76,7 @@ def query_langchain_model(model, query):
     return ans["result"], ans["source_documents"]
 
 def get_source_info(prompt):
+    st.write(prompt)
     res, source_docs = query_langchain_model(model, prompt)
     information_consulted = []
     for doc in source_docs:
