@@ -7,11 +7,11 @@ import re
 from io import BytesIO
 from typing import List, Union
 import os
+import json
 
 
 
 from langchain.chains import RetrievalQA
-from langchain.llms import OpenAI
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
 from langchain.prompts import PromptTemplate, BaseChatPromptTemplate
@@ -27,10 +27,6 @@ from langchain.prompts import BaseChatPromptTemplate, ChatPromptTemplate
 from langchain import SerpAPIWrapper, LLMChain
 from langchain.schema import AgentAction, AgentFinish, HumanMessage, SystemMessage
 from langchain.chat_models import ChatOpenAI
-# LLM wrapper
-from langchain import OpenAI
-# Conversational memory
-# Embeddings and vectorstore
 from langchain.embeddings.openai import OpenAIEmbeddings
 
 import streamlit as st
@@ -45,9 +41,19 @@ os.environ["SERPAPI_API_KEY"] = st.secrets["SERPAPI_API_KEY"]
 GPT_MODEL_VERSION = 'gpt-4'
 if 'OPENAI_ORG' in st.secrets:
     openai.organization = st.secrets['OPENAI_ORG']
-    GPT_MODEL_VERSION = 'gpt-3.5-turbo-16k-0613'
+    GPT_MODEL_VERSION = 'gpt-3.5-turbo-16k'
 
 openai.api_key = st.secrets['OPENAI_API_KEY']
+
+def parse_ans_gpt35(message):
+    json_part = message.split('Action:\n')[1]
+    # Parse the JSON string
+    data = json.loads(json_part)
+    # Extract the value of "action_input"
+    action_input = data["action_input"]
+    return action_input
+
+    
 
 # BASIC MODEL with Prompt engineering
 def load_langchain_model(docs):
@@ -59,7 +65,7 @@ def load_langchain_model(docs):
     retriever = db.as_retriever(search_type="similarity", search_kwargs={"k":2})
     # create a chain to answer questions 
     qa = RetrievalQA.from_chain_type(
-        llm=OpenAI(), chain_type="stuff", retriever=retriever, return_source_documents=True)
+        llm=ChatOpenAI(model = GPT_MODEL_VERSION), chain_type="stuff", retriever=retriever, return_source_documents=True)
     return qa
 
 def query_langchain_model(model, query):
@@ -89,7 +95,7 @@ def generate_prompt(prompt, source_info):
 
 def llm_agent():
     search = SerpAPIWrapper()
-    llm = OpenAI(temperature=0, model = GPT_MODEL_VERSION)
+    llm = ChatOpenAI(temperature=0, model = GPT_MODEL_VERSION)
     llm_math_chain = LLMMathChain.from_llm(llm=llm, verbose=True)
     tools = [
         Tool(name = "Check lecture notes", func = get_source_info, description = "Useful for when you need to consult information within your knowledge base. Use this before searching online."),
@@ -143,6 +149,8 @@ if prompt != '':
 
     full_prompt = generate_prompt(prompt, information_consulted)
     ans = my_agent.run(full_prompt)
+    if GPT_MODEL_VERSION == 'gpt-3.5-turbo-16k':
+        ans = parse_ans_gpt35(ans)
     st.markdown("<h1 style='text-align: center; color: green; font-family: sans-serif'>Answer from Agent:</h1>", unsafe_allow_html=True)
     st.write(ans)
 
