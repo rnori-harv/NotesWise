@@ -47,6 +47,7 @@ openai.api_key = st.secrets['OPENAI_API_KEY']
 
 def parse_ans_gpt35(message):
     split_message = message.split('Action:\n')
+    print(split_message)
     if len(split_message) == 1:
         return "No answer found"
     json_part = message.split('Action:\n')[1]
