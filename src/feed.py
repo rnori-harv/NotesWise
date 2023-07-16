@@ -48,7 +48,7 @@ openai.api_key = st.secrets['OPENAI_API_KEY']
 def parse_ans_gpt35(message):
     split_message = message.split('Action:\n')
     if len(split_message) == 1:
-        st.write(message)
+        return message
     json_part = message.split('Action:\n')[1]
     # Parse the JSON string
     data = json.loads(json_part)
@@ -151,9 +151,11 @@ if prompt != '':
         st.markdown(f"<p style='text-align: center; color: orange; font-family: sans-serif'>{source_loc}</p>", unsafe_allow_html=True)
 
     full_prompt = generate_prompt(prompt, information_consulted)
-    ans = my_agent.run(full_prompt)
+    output = my_agent.run(full_prompt)
     if GPT_MODEL_VERSION == 'gpt-3.5-turbo-16k':
-        ans = parse_ans_gpt35(ans)
+        ans = parse_ans_gpt35(output)
+    else:
+        ans = output
     st.markdown("<h1 style='text-align: center; color: green; font-family: sans-serif'>Answer from Agent:</h1>", unsafe_allow_html=True)
     st.write(ans)
 
