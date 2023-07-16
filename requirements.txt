@@ -1,9 +1,9 @@
 PyPDF2
 pypdf
 python-dotenv
-openai
+openai==0.27.8
 chromadb
-langchain
+langchain==0.0.234
 streamlit
 tiktoken
 typing
