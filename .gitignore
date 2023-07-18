@@ -6,7 +6,7 @@ __pycache__/
 *.pdf
 # C extensions
 *.so
-
+start.sh
 .streamlit/
 
 # Distribution / packaging

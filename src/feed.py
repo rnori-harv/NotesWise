@@ -12,6 +12,7 @@ import json
 
 
 from langchain.chains import RetrievalQA
+from langchain.chains.summarize import load_summarize_chain
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
 from langchain.prompts import PromptTemplate, BaseChatPromptTemplate
@@ -45,6 +46,14 @@ if 'OPENAI_ORG' in st.secrets:
 
 openai.api_key = st.secrets['OPENAI_API_KEY']
 
+@st.cache_resource(show_spinner=False)
+def load_llm_chain():
+    llm = ChatOpenAI(temperature=0, model = GPT_MODEL_VERSION)
+    summarizer = load_summarize_chain(llm, chain_type = "stuff")
+    return llm, summarizer
+
+llm, summarizer = load_llm_chain()
+
 def parse_ans_gpt35(message):
     split_message = message.split('Action:\n')
     if len(split_message) == 1:
@@ -72,17 +81,17 @@ def load_langchain_model(docs):
     return qa
 
 def query_langchain_model(model, query):
-    ans = model({"query": query})
-    return ans["result"], ans["source_documents"]
+    with st.spinner('Thinking...'):
+        ans = model({"query": query})
+        summary = summarizer.run(ans["source_documents"])
+        return ans["result"], ans["source_documents"], summary
 
 def get_source_info(prompt):
     if prompt == "":
         return "Please provide a non-empty prompt."
     res, source_docs = query_langchain_model(model, prompt)
-    information_consulted = []
-    for doc in source_docs:
-        information_consulted.append(doc.page_content)
-    return information_consulted
+    return summarizer.run(source_docs)
+    
 
 # Set up a prompt template
 def generate_prompt(prompt, source_info):
@@ -100,7 +109,6 @@ def generate_prompt(prompt, source_info):
 
 def llm_agent():
     search = SerpAPIWrapper()
-    llm = ChatOpenAI(temperature=0, model = GPT_MODEL_VERSION)
     llm_math_chain = LLMMathChain.from_llm(llm=llm, verbose=True)
     tools = [
         Tool(name = "Check lecture notes", func = get_source_info, description = "Useful for when you need to consult information within your knowledge base. Provide a non-empty query as the argument to this. Use this before searching online."),
@@ -138,28 +146,47 @@ def setup_ta():
 
 model, my_agent = setup_ta()
 
-
-# User input
-prompt = st.text_area('Enter your question here:')
-if prompt != '':
-    res, source_docs = query_langchain_model(model, prompt)
-    st.markdown("<h1 style='text-align: center; color: green; font-family: sans-serif'>Answer from knowledge base:</h1>", unsafe_allow_html=True)
-    st.write(res)
-    st.markdown("<h2 style='text-align: center; color: orange; font-family: sans-serif'>Lecture notes consulted:</h2>", unsafe_allow_html=True)
-    information_consulted = []
-    for doc in source_docs:
-        information_consulted.append(doc.page_content)
-        source_loc = doc.metadata["source"] + ", Page " + str(doc.metadata["page"])
-        st.markdown(f"<p style='text-align: center; color: orange; font-family: sans-serif'>{source_loc}</p>", unsafe_allow_html=True)
-
-    full_prompt = generate_prompt(prompt, information_consulted)
-    output = my_agent.run(full_prompt)
-    if GPT_MODEL_VERSION == 'gpt-3.5-turbo-16k':
-        ans = parse_ans_gpt35(output)
-    else:
-        ans = output
-    st.markdown("<h1 style='text-align: center; color: green; font-family: sans-serif'>Answer from Agent:</h1>", unsafe_allow_html=True)
+def online_agent(prompt, information_consulted):
+    with st.spinner('TA is searching online and coming up with an answer...'):
+        full_prompt = generate_prompt(prompt, information_consulted)
+        output = my_agent.run(full_prompt)
+        if GPT_MODEL_VERSION == 'gpt-3.5-turbo-16k':
+            ans = parse_ans_gpt35(output)
+        else:
+            ans = output
+    st.markdown("<h1 style='text-align: center; color: green; font-family: sans-serif'>Final Answer from Agent:</h1>", unsafe_allow_html=True)
     st.write(ans)
 
+
+
+# User input
+# Initialize the session state for the text area if it doesn't exist
+
+# Use the session state in the text area
+# Create a placeholder for the text area
+
+prompt = st.text_area('Enter your question here:', key = "prompt")
+
+def clear_prompt():
+    st.session_state["prompt"] = ""
+
+# Display the initial text area in the placeholder
+
+if st.button('Ask TA') and prompt != "":
+    res, source_docs, summary = query_langchain_model(model, prompt)
+    st.markdown("<h1 style='text-align: center; color: green; font-family: sans-serif'>Answer from knowledge base:</h1>", unsafe_allow_html=True)
+    st.write(res)
+    st.markdown("<h2 style='text-align: center; color: orange; font-family: sans-serif'>Source information consulted:</h2>", unsafe_allow_html=True)
+    for doc in source_docs:
+        source_loc = doc.metadata["source"] + ", Page " + str(doc.metadata["page"])
+        st.markdown(f"<p style='text-align: center; color: orange; font-family: sans-serif'>{source_loc}</p>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center; color: orange; font-family: sans-serif'>Summary of notes consulted:</h2>", unsafe_allow_html=True)
+    st.write(summary)
+
+    if summary:
+        if st.button('Not satisfied with the answer? Let the TA also use online resources to answer your question.'):
+            online_agent(prompt, summary)
+    if summary:
+        st.button('Ask another question', on_click = clear_prompt)
     
 
