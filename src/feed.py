@@ -81,16 +81,15 @@ def load_langchain_model(docs):
     return qa
 
 def query_langchain_model(model, query):
-    with st.spinner('Thinking...'):
-        ans = model({"query": query})
-        summary = summarizer.run(ans["source_documents"])
-        return ans["result"], ans["source_documents"], summary
+    ans = model({"query": query})
+    summary = summarizer.run(ans["source_documents"])
+    return ans["result"], ans["source_documents"], summary
 
 def get_source_info(prompt):
     if prompt == "":
         return "Please provide a non-empty prompt."
-    res, source_docs = query_langchain_model(model, prompt)
-    return summarizer.run(source_docs)
+    res, source_docs, summary = query_langchain_model(model, prompt)
+    return summary
     
 
 # Set up a prompt template
@@ -147,7 +146,7 @@ def setup_ta():
 model, my_agent = setup_ta()
 
 def online_agent(prompt, information_consulted):
-    with st.spinner('TA is searching online and coming up with an answer...'):
+    with st.spinner('TA is searching online and coming up with an answer. Note that this may take some time...'):
         full_prompt = generate_prompt(prompt, information_consulted)
         output = my_agent.run(full_prompt)
         if GPT_MODEL_VERSION == 'gpt-3.5-turbo-16k':
@@ -167,13 +166,19 @@ def online_agent(prompt, information_consulted):
 
 prompt = st.text_area('Enter your question here:', key = "prompt")
 
+
 def clear_prompt():
     st.session_state["prompt"] = ""
+    st.session_state['ask_ta_clicked'] = False
 
-# Display the initial text area in the placeholder
+if 'ask_ta_clicked' not in st.session_state:
+    st.session_state['ask_ta_clicked'] = False
 
-if st.button('Ask TA') and prompt != "":
-    res, source_docs, summary = query_langchain_model(model, prompt)
+
+@st.cache_data(show_spinner=False)
+def print_docsearch(prompt):
+    with st.spinner('TA is thinking...'):
+        res, source_docs, summary = query_langchain_model(model, prompt)
     st.markdown("<h1 style='text-align: center; color: green; font-family: sans-serif'>Answer from knowledge base:</h1>", unsafe_allow_html=True)
     st.write(res)
     st.markdown("<h2 style='text-align: center; color: orange; font-family: sans-serif'>Source information consulted:</h2>", unsafe_allow_html=True)
@@ -182,11 +187,19 @@ if st.button('Ask TA') and prompt != "":
         st.markdown(f"<p style='text-align: center; color: orange; font-family: sans-serif'>{source_loc}</p>", unsafe_allow_html=True)
     st.markdown("<h2 style='text-align: center; color: orange; font-family: sans-serif'>Summary of notes consulted:</h2>", unsafe_allow_html=True)
     st.write(summary)
+    return summary
+
+
+# Use the session state for the 'Ask TA' button
+if st.button('Ask TA'):
+    st.session_state['ask_ta_clicked'] = True
+# Display the initial text area in the placeholder
+if st.session_state['ask_ta_clicked'] and prompt != "":
+    summary = print_docsearch(prompt)
+    if st.button('Run online agent'):
+        st.session_state['ask_ta_clicked'] = True
+        online_agent(prompt, summary)
 
     if summary:
-        if st.button('Not satisfied with the answer? Let the TA also use online resources to answer your question.'):
-            online_agent(prompt, summary)
-    if summary:
         st.button('Ask another question', on_click = clear_prompt)
-    
 
