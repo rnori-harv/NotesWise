@@ -13,6 +13,7 @@ import json
 
 from langchain.chains import RetrievalQA
 from langchain.chains.summarize import load_summarize_chain
+from langchain.callbacks import StreamlitCallbackHandler
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
 from langchain.prompts import PromptTemplate, BaseChatPromptTemplate
@@ -48,7 +49,7 @@ openai.api_key = st.secrets['OPENAI_API_KEY']
 
 @st.cache_resource(show_spinner=False)
 def load_llm_chain():
-    llm = ChatOpenAI(temperature=0, model = GPT_MODEL_VERSION)
+    llm = ChatOpenAI(temperature=0, model = GPT_MODEL_VERSION, streaming = True)
     summarizer = load_summarize_chain(llm, chain_type = "stuff")
     return llm, summarizer
 
@@ -77,7 +78,7 @@ def load_langchain_model(docs):
     retriever = db.as_retriever(search_type="similarity", search_kwargs={"k":2})
     # create a chain to answer questions 
     qa = RetrievalQA.from_chain_type(
-        llm=ChatOpenAI(model = GPT_MODEL_VERSION), chain_type="stuff", retriever=retriever, return_source_documents=True)
+        llm=ChatOpenAI(model = GPT_MODEL_VERSION, streaming = True), chain_type="stuff", retriever=retriever, return_source_documents=True)
     return qa
 
 def query_langchain_model(model, query):
@@ -110,11 +111,11 @@ def llm_agent():
     search = SerpAPIWrapper()
     llm_math_chain = LLMMathChain.from_llm(llm=llm, verbose=True)
     tools = [
-        Tool(name = "Check lecture notes", func = get_source_info, description = "Useful for when you need to consult information within your knowledge base. Provide a non-empty query as the argument to this. Use this before searching online."),
+        Tool(name = "Search Notes", func = get_source_info, description = "Useful for when you need to consult information within your knowledge base. Provide a non-empty query as the argument to this. Use this before searching online."),
         Tool(name = "Search Online", func = search.run, description = "Useful for when you need to consult extra information not found in the lecture notes."),
          Tool(name="Calculator", func=llm_math_chain.run, description="useful for when you need to answer questions about math")
     ]
-    openai_model = ChatOpenAI(temperature=0, model = GPT_MODEL_VERSION)
+    openai_model = ChatOpenAI(temperature=0, model = GPT_MODEL_VERSION, streaming = True)
     planner = load_chat_planner(openai_model)
     executor = load_agent_executor(openai_model, tools, verbose=True)
     planner_agent = PlanAndExecute(planner=planner, executor=executor, verbose=True)
@@ -146,13 +147,13 @@ def setup_ta():
 model, my_agent = setup_ta()
 
 def online_agent(prompt, information_consulted):
-    with st.spinner('TA is searching online and coming up with an answer. Note that this may take some time...'):
-        full_prompt = generate_prompt(prompt, information_consulted)
-        output = my_agent.run(full_prompt)
-        if GPT_MODEL_VERSION == 'gpt-3.5-turbo-16k':
-            ans = parse_ans_gpt35(output)
-        else:
-            ans = output
+    st_callback = StreamlitCallbackHandler(st.container())
+    full_prompt = generate_prompt(prompt, information_consulted)
+    output = my_agent.run(full_prompt, callbacks = [st_callback])
+    if GPT_MODEL_VERSION == 'gpt-3.5-turbo-16k':
+        ans = parse_ans_gpt35(output)
+    else:
+        ans = output
     st.markdown("<h1 style='text-align: center; color: green; font-family: sans-serif'>Final Answer from Agent:</h1>", unsafe_allow_html=True)
     st.write(ans)
 
@@ -196,9 +197,9 @@ if st.button('Ask TA'):
 # Display the initial text area in the placeholder
 if st.session_state['ask_ta_clicked'] and prompt != "":
     summary = print_docsearch(prompt)
-    if st.button('Run online agent'):
-        st.session_state['ask_ta_clicked'] = True
+    if st.button('Ask TA to also search online'):
         online_agent(prompt, summary)
+        
 
     if summary:
         st.button('Ask another question', on_click = clear_prompt)
