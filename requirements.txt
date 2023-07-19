@@ -7,4 +7,5 @@ langchain==0.0.234
 streamlit==1.24.1
 tiktoken
 typing
+pydantic
 google-search-results

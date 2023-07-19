@@ -18,11 +18,12 @@ from langchain.embeddings import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
 from langchain.prompts import PromptTemplate, BaseChatPromptTemplate
 from langchain.chains import LLMChain
-from langchain.agents import load_tools, Tool, AgentOutputParser
+from langchain.agents import load_tools, AgentOutputParser, AgentType
+from langchain.tools import BaseTool, StructuredTool, Tool, tool
 from langchain.agents import initialize_agent
 from langchain.schema import HumanMessage, Document
 from langchain import LLMMathChain
-
+from pydantic import BaseModel, Field
 from langchain.agents import Tool, AgentExecutor, LLMSingleActionAgent, AgentOutputParser
 from langchain.experimental.plan_and_execute import PlanAndExecute, load_agent_executor, load_chat_planner
 from langchain.prompts import BaseChatPromptTemplate, ChatPromptTemplate
@@ -105,6 +106,9 @@ def generate_prompt(prompt, source_info):
     """
     return prompt
 
+class CalculatorInput(BaseModel):
+    question: str = Field()
+
 
 
 def llm_agent():
@@ -113,13 +117,16 @@ def llm_agent():
     tools = [
         Tool(name = "Search Notes", func = get_source_info, description = "Useful for when you need to consult information within your knowledge base. Provide a non-empty query as the argument to this. Use this before searching online."),
         Tool(name = "Search Online", func = search.run, description = "Useful for when you need to consult extra information not found in the lecture notes."),
-         Tool(name="Calculator", func=llm_math_chain.run, description="useful for when you need to answer questions about math")
+         Tool(name="Calculator", func=llm_math_chain.run, description="useful for when you need to answer questions about math. Only put numerical expressions in this.", args_schema=CalculatorInput)
     ]
     openai_model = ChatOpenAI(temperature=0, model = GPT_MODEL_VERSION, streaming = True)
-    planner = load_chat_planner(openai_model)
-    executor = load_agent_executor(openai_model, tools, verbose=True)
-    planner_agent = PlanAndExecute(planner=planner, executor=executor, verbose=True)
-    return planner_agent
+    # planner = load_chat_planner(openai_model)
+    # executor = load_agent_executor(openai_model, tools, verbose=True)
+    # planner_agent = PlanAndExecute(planner=planner, executor=executor, verbose=True)
+    # return planner_agent
+    agent = initialize_agent(tools, openai_model, agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION, verbose=True)
+    return agent
+
 
 
 files = st.file_uploader("Upload your lecture note files (PDF)", type=["pdf"], accept_multiple_files=True)
