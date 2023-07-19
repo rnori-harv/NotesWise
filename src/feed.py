@@ -84,14 +84,12 @@ def load_langchain_model(docs):
 
 def query_langchain_model(model, query):
     ans = model({"query": query})
-    summary = summarizer.run(ans["source_documents"])
-    return ans["result"], ans["source_documents"], summary
+    return ans["result"], ans["source_documents"]
 
 def get_source_info(prompt):
-    if prompt == "":
-        return "Please provide a non-empty prompt."
-    res, source_docs, summary = query_langchain_model(model, prompt)
-    return summary
+    prompt = "Use your notes to give more information about the following prompt: " + prompt
+    res, source_docs = query_langchain_model(model, prompt)
+    return res
     
 
 # Set up a prompt template
@@ -161,8 +159,7 @@ def online_agent(prompt, information_consulted):
         ans = parse_ans_gpt35(output)
     else:
         ans = output
-    st.markdown("<h1 style='text-align: center; color: green; font-family: sans-serif'>Final Answer from Agent:</h1>", unsafe_allow_html=True)
-    st.write(ans)
+    return ans
 
 
 
@@ -172,7 +169,7 @@ def online_agent(prompt, information_consulted):
 # Use the session state in the text area
 # Create a placeholder for the text area
 
-prompt = st.text_area('Enter your question here:', key = "prompt")
+# prompt = st.text_area('Enter your question here:', key = "prompt")
 
 
 def clear_prompt():
@@ -186,7 +183,8 @@ if 'ask_ta_clicked' not in st.session_state:
 @st.cache_data(show_spinner=False)
 def print_docsearch(prompt):
     with st.spinner('TA is thinking...'):
-        res, source_docs, summary = query_langchain_model(model, prompt)
+        res, source_docs = query_langchain_model(model, prompt)
+        summary = summarizer.run(source_docs)
     st.markdown("<h1 style='text-align: center; color: green; font-family: sans-serif'>Answer from knowledge base:</h1>", unsafe_allow_html=True)
     st.write(res)
     st.markdown("<h2 style='text-align: center; color: orange; font-family: sans-serif'>Source information consulted:</h2>", unsafe_allow_html=True)
@@ -197,17 +195,25 @@ def print_docsearch(prompt):
     st.write(summary)
     return summary
 
+# Initialize chat history
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
-# Use the session state for the 'Ask TA' button
-if st.button('Ask TA'):
-    st.session_state['ask_ta_clicked'] = True
-# Display the initial text area in the placeholder
-if st.session_state['ask_ta_clicked'] and prompt != "":
-    summary = print_docsearch(prompt)
-    if st.button('Ask TA to also search online'):
-        online_agent(prompt, summary)
-        
+# Display chat messages from history on app rerun
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
 
-    if summary:
-        st.button('Ask another question', on_click = clear_prompt)
+if prompt := st.chat_input("Ask your question here:"):
+    # Display user message in chat message container
+    with st.chat_message("user"):
+        st.markdown(prompt)
+    # Add user message to chat history
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    response = online_agent(prompt, summarizer.run(query_langchain_model(model, prompt)[1]))
+    # Display assistant response in chat message container
+    with st.chat_message("assistant"):
+        st.markdown(response)
+    # Add assistant response to chat history
+    st.session_state.messages.append({"role": "assistant", "content": response})
 
