@@ -93,11 +93,9 @@ def get_source_info(prompt):
     
 
 # Set up a prompt template
-def generate_prompt(prompt, source_info):
+def generate_prompt(prompt):
     prompt = f"""
-    Please answer the student's question in a step by step manner with clear explanation using the source information provided.
-    Source information:
-    {source_info}
+    Please answer the student's question in a step by step manner with clear explanation by searching your notes, the internet, or using a calculator.
     Student's question:
     {prompt}
     Answer:
@@ -105,17 +103,24 @@ def generate_prompt(prompt, source_info):
     return prompt
 
 class CalculatorInput(BaseModel):
-    question: str = Field()
+    question: str = Field(..., description="The input must be a numerical expression")
 
-
-
+llm_math_chain = LLMMathChain.from_llm(llm=llm, verbose=True)
+def calculator_func(input):
+    try:
+        if input is None or input.strip() == '':
+            return 'Try again with a non-empty input.'
+        else:
+            return llm_math_chain.run(input)
+    except Exception as e:
+        return 'Try again with a valid numerical expression.'
+    
 def llm_agent():
     search = SerpAPIWrapper()
-    llm_math_chain = LLMMathChain.from_llm(llm=llm, verbose=True)
     tools = [
         Tool(name = "Search Notes", func = get_source_info, description = "Useful for when you need to consult information within your knowledge base. Provide a non-empty query as the argument to this. Use this before searching online."),
         Tool(name = "Search Online", func = search.run, description = "Useful for when you need to consult extra information not found in the lecture notes."),
-         Tool(name="Calculator", func=llm_math_chain.run, description="useful for when you need to answer questions about math. Only put numerical expressions in this.", args_schema=CalculatorInput)
+         Tool(name="Calculator", func=calculator_func , description="useful for when you need to answer questions about math. Only put numerical expressions in this.", args_schema=CalculatorInput)
     ]
     openai_model = ChatOpenAI(temperature=0, model = GPT_MODEL_VERSION, streaming = True)
     # planner = load_chat_planner(openai_model)
@@ -151,9 +156,9 @@ def setup_ta():
 
 model, my_agent = setup_ta()
 
-def online_agent(prompt, information_consulted):
+def online_agent(prompt):
     st_callback = StreamlitCallbackHandler(st.container())
-    full_prompt = generate_prompt(prompt, information_consulted)
+    full_prompt = generate_prompt(prompt)
     output = my_agent.run(full_prompt, callbacks = [st_callback])
     if GPT_MODEL_VERSION == 'gpt-3.5-turbo-16k':
         ans = parse_ans_gpt35(output)
@@ -210,7 +215,7 @@ if prompt := st.chat_input("Ask your question here:"):
         st.markdown(prompt)
     # Add user message to chat history
     st.session_state.messages.append({"role": "user", "content": prompt})
-    response = online_agent(prompt, summarizer.run(query_langchain_model(model, prompt)[1]))
+    response = online_agent(prompt)
     # Display assistant response in chat message container
     with st.chat_message("assistant"):
         st.markdown(response)
