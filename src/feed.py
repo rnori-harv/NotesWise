@@ -44,7 +44,6 @@ os.environ["SERPAPI_API_KEY"] = st.secrets["SERPAPI_API_KEY"]
 GPT_MODEL_VERSION = 'gpt-4'
 if 'OPENAI_ORG' in st.secrets:
     openai.organization = st.secrets['OPENAI_ORG']
-    GPT_MODEL_VERSION = 'gpt-3.5-turbo-16k'
 
 openai.api_key = st.secrets['OPENAI_API_KEY']
 
