@@ -47,6 +47,31 @@ if 'OPENAI_ORG' in st.secrets:
 
 openai.api_key = st.secrets['OPENAI_API_KEY']
 
+
+
+SYSTEM_PROMPT = "You are an AI tutor that helps students solve complex problem set questions using a variety of online tools: the student's lecture notes, online search, and a python interpreter. You will do tasks in the following order: determine the problem's topic, search lecture notes for similar problems / answers of that same topic as well as relevant concepts of that topic, search online for any additional information you might need to solve the problem, and finally a calculator."
+
+TOPIC_PROMPT = '''
+In this user's question, extract the topic that this question is asking about and present it to the user. Here is an example: 
+\nQuestion: 
+True or False: If X and Y have the same CDF, they have the same expectation.
+
+Probability Distribution and expectation
+
+Question: \n
+''' 
+
+def reasoning_prompt(user_question, question_topic, notes_info, online_info):
+    return f'''
+    System context: {SYSTEM_PROMPT}
+    Question: {user_question}
+    Topic: {question_topic}
+    Notes Info: {notes_info}
+    Online Info: {online_info}
+    Given all of this information, answer the student's question in a step by step manner with clear explanation. If you need to use a calculator, use the calculator tool.
+    Answer: 
+    '''
+
 @st.cache_resource(show_spinner=False)
 def load_llm_chain():
     llm = ChatOpenAI(temperature=0, model = GPT_MODEL_VERSION, streaming = True)
@@ -55,17 +80,8 @@ def load_llm_chain():
 
 llm, summarizer = load_llm_chain()
 
-def parse_ans_gpt35(message):
-    split_message = message.split('Action:\n')
-    if len(split_message) == 1:
-        return message
-    json_part = message.split('Action:\n')[1]
-    # Parse the JSON string
-    data = json.loads(json_part)
-    # Extract the value of "action_input"
-    action_input = data["action_input"]
-    return action_input
-
+def get_topic(user_question):
+    return ChatOpenAI(temperature=0, model = GPT_MODEL_VERSION, streaming = True).predict(TOPIC_PROMPT + user_question)
     
 
 # BASIC MODEL with Prompt engineering
@@ -81,25 +97,21 @@ def load_langchain_model(docs):
         llm=ChatOpenAI(model = GPT_MODEL_VERSION, streaming = True), chain_type="stuff", retriever=retriever, return_source_documents=True)
     return qa
 
-def query_langchain_model(model, query):
-    ans = model({"query": query})
-    return ans["result"], ans["source_documents"]
 
-def get_source_info(prompt):
-    prompt = "Use your notes to give more information about the following prompt: " + prompt
-    res, source_docs = query_langchain_model(model, prompt)
-    return res
+def search_notes(notes_llm, user_question, topic):
+    search_prompt = f'''
+    Question: {user_question}
+    Topic: {topic}
+    Search the student's lecture notes for similar problems / answers of that same topic as well as relevant concepts of that topic.
+    '''
+    ans = notes_llm({"query": search_prompt})
+
+    notes_info = ""
+    for page in ans["source_documents"]:
+        notes_info += page.page_content
     
+    return notes_info
 
-# Set up a prompt template
-def generate_prompt(prompt):
-    prompt = f"""
-    Please answer the student's question in a step by step manner with clear explanation by searching your notes, the internet, or using a calculator.
-    Student's question:
-    {prompt}
-    Answer:
-    """
-    return prompt
 
 class CalculatorInput(BaseModel):
     question: str = Field(..., description="The input must be a numerical expression")
@@ -113,22 +125,35 @@ def calculator_func(input):
             return llm_math_chain.run(input)
     except Exception as e:
         return 'Try again with a valid numerical expression.'
-    
-def llm_agent():
-    search = SerpAPIWrapper()
-    tools = [
-        Tool(name = "Search Notes", func = get_source_info, description = "Useful for when you need to consult information within your knowledge base. Provide a non-empty query as the argument to this. Use this before searching online."),
-        Tool(name = "Search Online", func = search.run, description = "Useful for when you need to consult extra information not found in the lecture notes."),
-         Tool(name="Calculator", func=calculator_func , description="useful for when you need to answer questions about math. Only put numerical expressions in this.", args_schema=CalculatorInput)
-    ]
-    openai_model = ChatOpenAI(temperature=0, model = GPT_MODEL_VERSION, streaming = True)
-    # planner = load_chat_planner(openai_model)
-    # executor = load_agent_executor(openai_model, tools, verbose=True)
-    # planner_agent = PlanAndExecute(planner=planner, executor=executor, verbose=True)
-    # return planner_agent
-    agent = initialize_agent(tools, openai_model, agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION, verbose=True)
-    return agent
 
+def online_search_prompt(user_question, topic):
+    return f'''
+    Question: {user_question}
+    Topic: {topic}
+    Search online for any additional information you might need to solve the problem.
+    '''
+    
+@st.cache_resource(show_spinner=False)
+def reasoning_agent(user_question):
+    search = SerpAPIWrapper()
+    openai_model = ChatOpenAI(temperature=0, model = GPT_MODEL_VERSION, streaming = True)
+    user_topic = get_topic(user_question)
+    st.session_state.messages.append({"role": "assistant", "content": "seems like the question is about "+ user_topic})
+    st.write("your question topic: " + user_topic)
+    notes_info = search_notes(notes_llm, user_question, user_topic)
+    st.session_state.messages.append({"role": "assistant", "content": "here is some information from your notes that might be helpful: "+ notes_info})
+    st.write("some infromation from your notes: " + notes_info)
+    online_info = search.run(online_search_prompt(user_question, user_topic))
+    st.session_state.messages.append({"role": "assistant", "content": "here is some information from the internet that might be helpful: "+ online_info})
+    st.write("relevant information from the internet: " + online_info)
+
+    full_prompt = reasoning_prompt(user_question, user_topic, notes_info, online_info)
+    calc_tool = Tool(name="Calculator", func=calculator_func , description="useful for when you need to answer questions about math. Only put numerical expressions in this.", args_schema=CalculatorInput)
+
+    agent = initialize_agent([calc_tool], openai_model, agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION, verbose=True)
+    st_callback = StreamlitCallbackHandler(st.container())
+    output = agent.run(full_prompt, callbacks = [st_callback])
+    return output
 
 
 files = st.file_uploader("Upload your lecture note files (PDF)", type=["pdf"], accept_multiple_files=True)
@@ -148,24 +173,11 @@ def setup_ta():
                 curr_doc = Document(page_content=page_content_str, metadata={"source": file.name, "page": page_num + 1})
                 docs.append(curr_doc)
     with st.spinner('Preparing your TA'):
-        model = load_langchain_model(docs)
-        my_agent = llm_agent()
-        return model, my_agent
+        notes_llm = load_langchain_model(docs)
+    return notes_llm
         
 
-model, my_agent = setup_ta()
-
-def online_agent(prompt):
-    st_callback = StreamlitCallbackHandler(st.container())
-    full_prompt = generate_prompt(prompt)
-    output = my_agent.run(full_prompt, callbacks = [st_callback])
-    if GPT_MODEL_VERSION == 'gpt-3.5-turbo-16k':
-        ans = parse_ans_gpt35(output)
-    else:
-        ans = output
-    return ans
-
-
+notes_llm = setup_ta()
 
 # User input
 # Initialize the session state for the text area if it doesn't exist
@@ -183,22 +195,6 @@ def clear_prompt():
 if 'ask_ta_clicked' not in st.session_state:
     st.session_state['ask_ta_clicked'] = False
 
-
-@st.cache_data(show_spinner=False)
-def print_docsearch(prompt):
-    with st.spinner('TA is thinking...'):
-        res, source_docs = query_langchain_model(model, prompt)
-        summary = summarizer.run(source_docs)
-    st.markdown("<h1 style='text-align: center; color: green; font-family: sans-serif'>Answer from knowledge base:</h1>", unsafe_allow_html=True)
-    st.write(res)
-    st.markdown("<h2 style='text-align: center; color: orange; font-family: sans-serif'>Source information consulted:</h2>", unsafe_allow_html=True)
-    for doc in source_docs:
-        source_loc = doc.metadata["source"] + ", Page " + str(doc.metadata["page"])
-        st.markdown(f"<p style='text-align: center; color: orange; font-family: sans-serif'>{source_loc}</p>", unsafe_allow_html=True)
-    st.markdown("<h2 style='text-align: center; color: orange; font-family: sans-serif'>Summary of notes consulted:</h2>", unsafe_allow_html=True)
-    st.write(summary)
-    return summary
-
 # Initialize chat history
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -214,10 +210,11 @@ if prompt := st.chat_input("Ask your question here:"):
         st.markdown(prompt)
     # Add user message to chat history
     st.session_state.messages.append({"role": "user", "content": prompt})
-    response = online_agent(prompt)
+
+
     # Display assistant response in chat message container
     with st.chat_message("assistant"):
+        response = reasoning_agent(prompt)    # Add assistant response to chat history
         st.markdown(response)
-    # Add assistant response to chat history
     st.session_state.messages.append({"role": "assistant", "content": response})
 
