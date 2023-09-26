@@ -49,7 +49,7 @@ openai.api_key = st.secrets['OPENAI_API_KEY']
 
 
 
-SYSTEM_PROMPT = "You are an AI tutor that helps students solve complex problem set questions using a variety of online tools: the student's lecture notes, online search, and a python interpreter. You will do tasks in the following order: determine the problem's topic, search lecture notes for similar problems / answers of that same topic as well as relevant concepts of that topic, search online for any additional information you might need to solve the problem, and finally a calculator."
+SYSTEM_PROMPT = "You are an AI tutor that helps students solve complex problem set questions using a python interpreter."
 
 TOPIC_PROMPT = '''
 In this user's question, extract the topic that this question is asking about and present it to the user. Here is an example: 
@@ -98,9 +98,8 @@ def load_langchain_model(docs):
     return qa
 
 
-def search_notes(notes_llm, user_question, topic):
+def search_notes(topic):
     search_prompt = f'''
-    Question: {user_question}
     Topic: {topic}
     Search the student's lecture notes for similar problems / answers of that same topic as well as relevant concepts of that topic.
     '''
@@ -140,7 +139,7 @@ def reasoning_agent(user_question):
     user_topic = get_topic(user_question)
     st.session_state.messages.append({"role": "assistant", "content": "seems like the question is about "+ user_topic})
     st.write("your question topic: " + user_topic)
-    notes_info = search_notes(notes_llm, user_question, user_topic)
+    notes_info = search_notes(user_topic)
     st.session_state.messages.append({"role": "assistant", "content": "here is some information from your notes that might be helpful: "+ notes_info})
     st.write("some infromation from your notes: " + notes_info)
     online_info = search.run(online_search_prompt(user_question, user_topic))
@@ -148,9 +147,12 @@ def reasoning_agent(user_question):
     st.write("relevant information from the internet: " + online_info)
 
     full_prompt = reasoning_prompt(user_question, user_topic, notes_info, online_info)
-    calc_tool = Tool(name="Calculator", func=calculator_func , description="useful for when you need to answer questions about math. Only put numerical expressions in this.", args_schema=CalculatorInput)
-
-    agent = initialize_agent([calc_tool], openai_model, agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION, verbose=True)
+    tools = [
+        Tool(name = "Search Notes", func = search_notes, description = "Useful for when you need to consult information within your knowledge base. Provide a non-empty topic as the argument to this."),
+        Tool(name = "Search Online", func = search.run, description = "Useful for when you need to consult extra information not found in the lecture notes."),
+         Tool(name="Calculator", func=calculator_func , description="useful for when you need to answer questions about math. Only put numerical expressions in this.", args_schema=CalculatorInput)
+    ]
+    agent = initialize_agent(tools, openai_model, agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION, verbose=True)
     st_callback = StreamlitCallbackHandler(st.container())
     output = agent.run(full_prompt, callbacks = [st_callback])
     return output
