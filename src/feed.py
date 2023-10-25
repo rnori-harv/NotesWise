@@ -98,6 +98,7 @@ def load_langchain_model(docs):
     return qa
 
 
+
 def search_notes(topic):
     search_prompt = f'''
     Topic: {topic}
@@ -115,6 +116,9 @@ def search_notes(topic):
 class CalculatorInput(BaseModel):
     question: str = Field(..., description="The input must be a numerical expression")
 
+class OracleInput(BaseModel):
+    question_and_topic: str = Field(..., description="The input must be a non-empty string that contains the question and the topic")
+
 llm_math_chain = LLMMathChain.from_llm(llm=llm, verbose=True)
 def calculator_func(input):
     try:
@@ -124,6 +128,20 @@ def calculator_func(input):
             return llm_math_chain.run(input)
     except Exception as e:
         return 'Try again with a valid numerical expression.'
+
+def oracle_prompt(question):
+    ORACLE_SYSTEM_PROMPT = "You are an AI tutor that helps students solve complex problem set questions."
+    system_prompt = {"role": "system", "content": ORACLE_SYSTEM_PROMPT}
+    user_prompt = {"role": "user", "content": question}
+    return [system_prompt, user_prompt]
+
+
+def query_oracle(question):
+    completion = openai.ChatCompletion.create(
+        model="ft:gpt-3.5-turbo-0613:personal::84zlah7I",
+        messages= oracle_prompt(question),
+        )
+    return completion.choices[0].message
 
 def online_search_prompt(user_question, topic):
     return f'''
@@ -139,21 +157,23 @@ def reasoning_agent(user_question):
     user_topic = get_topic(user_question)
     st.session_state.messages.append({"role": "assistant", "content": "seems like the question is about "+ user_topic})
     st.write("your question topic: " + user_topic)
+    st.write("searching your notes and online to get started...")
+
     notes_info = search_notes(user_topic)
     st.session_state.messages.append({"role": "assistant", "content": "here is some information from your notes that might be helpful: "+ notes_info})
-    st.write("some infromation from your notes: " + notes_info)
     online_info = search.run(online_search_prompt(user_question, user_topic))
     st.session_state.messages.append({"role": "assistant", "content": "here is some information from the internet that might be helpful: "+ online_info})
-    st.write("relevant information from the internet: " + online_info)
 
     full_prompt = reasoning_prompt(user_question, user_topic, notes_info, online_info)
     tools = [
         Tool(name = "Search Notes", func = search_notes, description = "Useful for when you need to consult information within your knowledge base. Provide a non-empty topic as the argument to this."),
         Tool(name = "Search Online", func = search.run, description = "Useful for when you need to consult extra information not found in the lecture notes."),
-         Tool(name="Calculator", func=calculator_func , description="useful for when you need to answer questions about math. Only put numerical expressions in this.", args_schema=CalculatorInput)
+         Tool(name="Calculator", func=calculator_func , description="useful for when you need to answer questions about math. Only put numerical expressions in this.", args_schema=CalculatorInput),
+        Tool(name="Expert Oracle", func=query_oracle, description="Useful for when you want to see how an expert bot trained on answering questions from this topic would answer it. Provide a non-empty topic and user question", args_schema=OracleInput)
     ]
-    agent = initialize_agent(tools, openai_model, agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION, verbose=True)
     st_callback = StreamlitCallbackHandler(st.container())
+
+    agent = initialize_agent(tools, openai_model, agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION, verbose=True)
     output = agent.run(full_prompt, callbacks = [st_callback])
     return output
 
